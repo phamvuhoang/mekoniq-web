@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="vi" data-theme="dark"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MEKONIQ Serve · Robot</title>
+<link rel="icon" href="logo.svg"><link rel="stylesheet" href="brand.css">
+<style>
+  body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; font-size: 18px; }
+  main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 18px; padding: 20px 20px 120px; max-width: 900px; width: 100%; margin: auto; text-align: center; }
+  .kicker { text-transform: uppercase; letter-spacing: .16em; font-size: 13px; font-weight: 900; color: var(--mint); }
+  .huge { font-size: clamp(40px, 10vw, 96px); font-weight: 950; letter-spacing: -.05em; line-height: 1; margin: 0; }
+  .big { font-size: clamp(22px, 4.5vw, 36px); font-weight: 800; letter-spacing: -.02em; line-height: 1.2; margin: 0; }
+  .sub { color: var(--muted); font-size: clamp(16px, 2.6vw, 20px); margin: 0; }
+  .trays { display: grid; gap: 10px; text-align: left; }
+  .tray { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); font-weight: 800; font-size: 20px; }
+  .tray.off { opacity: .5; text-decoration: line-through; }
+  .tray .pill { text-decoration: none; }
+  .actions { display: grid; gap: 12px; }
+  .act { min-height: 84px; font-size: clamp(20px, 3.6vw, 28px); border-radius: 22px; }
+  .act.secondary { min-height: 60px; font-size: 18px; }
+  .screen-danger { background: var(--danger); }
+  .screen-danger .sub, .screen-danger .kicker { color: #fff; }
+  .screen-warn { background: #7a3d12; }
+  .screen-warn .kicker { color: #ffd2b5; }
+  #estop { position: fixed; right: 18px; bottom: 18px; width: 96px; height: 96px; border-radius: 50%; border: 6px solid #ffd400;
+    background: var(--danger); color: #fff; font-weight: 950; font-size: 15px; letter-spacing: .04em; box-shadow: 0 8px 30px rgba(0,0,0,.4); z-index: 30; }
+  #start { position: fixed; inset: 0; z-index: 50; background: var(--deep); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; border: 0; color: #fff; width: 100%; }
+  #start img { width: 120px; }
+  .tables { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+  .tables .pick { min-height: 70px; }
+  .tables .pick b { font-size: 26px; }
+  .meter { height: 10px; background: var(--soft); border-radius: 5px; overflow: hidden; max-width: 420px; width: 100%; margin: 0 auto; }
+  .meter > div { height: 100%; background: var(--mint); transition: width 1s linear; }
+</style>
+</head><body>
+<header class="top"><div class="nav">
+  <div id="brand"></div>
+  <div class="navright"><span class="pill" id="bat">🔋 —</span><span class="dot" id="conn" title="Kết nối hệ thống"></span></div>
+</div></header>
+<main id="view" aria-live="polite"></main>
+<button id="estop" aria-label="Dừng khẩn cấp">DỪNG</button>
+<button id="start"><img src="logo.svg" alt=""><span class="big">Chạm để khởi động màn hình robot</span><span class="sub">Bật âm thanh thông báo tiếng Việt</span></button>
+<div id="offline" hidden>Mất kết nối tới hệ thống điều phối — đang kết nối lại…</div>
+
+<script src="transport.js"></script><script src="common.js"></script>
+<script>
+// Which robot this tablet is mounted on: robot.html?robot=R2 (default R1).
+const ID = new URLSearchParams(location.search).get('robot') || 'R1';
+const BY = 'Màn hình ' + ID;
+const $ = id => document.getElementById(id);
+$('brand').innerHTML = BRAND('Serve S1 · Robot ' + ID);
+document.title = 'MEKONIQ · Robot ' + ID;
+$('start').onclick = () => { enableSound(); $('start').hidden = true; };
+$('estop').onclick = () => send({ type: 'estop', robot: ID, by: BY });
+
+let pick = [];   // tables chosen while on standby
+const btn = (act, label, cls = 'primary', extra = '') => `<button class="btn act ${cls}" data-act="${act}" ${extra}>${label}</button>`;
+const armBtn = (key, act, label, armedLabel, cls = 'secondary') =>
+  `<button class="btn act ${cls} ${isArmed(key) ? 'armed' : ''}" data-act="${act}">${isArmed(key) ? armedLabel : label}</button>`;
+
+function trayList(m, filter) {
+  return `<div class="trays">${m.stops.filter(filter).map(s => {
+    const off = s.status === 'skipped' || s.status === 'cancelled';
+    return `<div class="tray ${off ? 'off' : ''}"><span>Khay ${s.tray} → Bàn ${short(s.p)}</span>${off ? '<span class="pill warn">Đã huỷ · không xếp</span>' : s.status === 'done' ? '<span class="pill ok">Đã giao</span>' : ''}</div>`;
+  }).join('')}</div>`;
+}
+
+function view(r, m) {
+  document.body.className = '';
+  if (!r) return `<p class="big">Không có robot "${esc(ID)}" trong cấu hình</p>`;
+  if (r.halt === 'estop') {
+    document.body.className = 'screen-danger';
+    return `<p class="kicker">An toàn</p><p class="huge">ĐÃ DỪNG KHẨN CẤP</p>
+      <p class="sub">Nhân viên kiểm tra quanh robot. Khi an toàn, nhả nút dừng và cho robot chạy tiếp.</p>
+      <div class="actions">${armBtn('rs', 'resume', 'Nhả dừng · Chạy tiếp', 'Chạm lần nữa: đã kiểm tra an toàn', 'dark')}</div>`;
+  }
+  if (r.halt === 'blocked') {
+    document.body.className = 'screen-warn';
+    return `<p class="kicker">Robot đang chờ</p><p class="huge">Xin nhường đường</p><p class="sub">Có vật cản phía trước robot.</p>
+      <div class="actions">${btn('clear', 'Nhân viên: đã dọn lối đi', 'secondary')}</div>`;
+  }
+  if (r.halt === 'paused') return `<p class="kicker">Tạm dừng</p><p class="huge">Robot tạm dừng</p><p class="sub">Một trạm đã tạm dừng robot này.</p>
+      <div class="actions">${btn('resume', 'Chạy tiếp')}</div>`;
+  if (r.offline) return `<p class="kicker">Kết nối</p><p class="huge">Mất kết nối robot</p><p class="sub">Đang chờ robot kết nối lại hệ thống…</p>`;
+
+  if (r.phase === 'atStop' && m) {
+    const s = m.stops[m.cur], place = pname(s.p);
+    if (s.a === 'handoff') return `<p class="kicker">${esc(place)}</p>
+      <p class="huge">Món của quý khách</p><p class="big">ở <span style="color:var(--mint)">Khay ${s.tray}</span></p>
+      ${m.note ? `<p class="sub">📝 ${esc(m.note)}</p>` : ''}
+      <p class="sub">Mời quý khách lấy món rồi bấm “Đã nhận”. <span id="timer"></span></p>
+      <div class="actions">${btn('confirm', '✓ Đã nhận món')}${armBtn('cx', 'cancelStop', 'Không đúng món / Huỷ món', 'Chạm lần nữa để huỷ — robot mang món về')}</div>`;
+    if (s.a === 'load') return `<p class="kicker">${esc(place)} · ${esc(m.label)}</p><p class="huge">Xếp đồ lên khay</p>
+      ${m.note ? `<p class="sub">📝 ${esc(m.note)}</p>` : ''}
+      ${trayList(m, x => x.a === 'handoff')}
+      <div class="actions">${btn('confirm', 'Đã xếp xong · Đi giao')}${armBtn('cm', 'cancel', 'Huỷ nhiệm vụ', 'Chạm lần nữa để huỷ')}</div>`;
+    if (s.a === 'return') return `<p class="kicker">${esc(place)}</p><p class="huge">Trả lại đồ bị huỷ</p>
+      <div class="trays">${s.trays.map(t => `<div class="tray"><span>Khay ${t.tray}</span><span>Bàn ${short(t.table)}</span></div>`).join('')}</div>
+      <div class="actions">${btn('confirm', 'Đã nhận lại đồ')}</div>`;
+    if (s.a === 'collect') return `<p class="kicker">${esc(place)}</p><p class="huge">Thu dọn bàn</p>
+      <p class="sub">Mời đặt chén đĩa lên khay, robot sẽ mang về ${esc(pname(App.site.dishPoint))}.</p>
+      <div class="actions">${btn('confirm', 'Xong · Mang về khu rửa')}${armBtn('cm', 'cancel', 'Không có gì để thu', 'Chạm lần nữa: cho robot về')}</div>`;
+    if (s.a === 'unload') return `<p class="kicker">${esc(place)}</p><p class="huge">Dỡ chén đĩa</p>
+      <div class="actions">${btn('confirm', 'Đã dỡ xong')}</div>`;
+    if (s.a === 'standby') {
+      const station = App.site.points[s.p].kind === 'station';
+      const tables = Object.keys(App.site.points).filter(k => App.site.points[k].kind === 'table');
+      return `<p class="kicker">Chờ lệnh tại ${esc(place)} · gọi bởi ${esc(m.by)}</p>
+        ${station ? `<p class="big">Chọn bàn cần giao (${pick.length}/${App.site.trays} khay)</p>
+          <div class="tables">${tables.map(t => `<button class="pick" data-t="${t}" aria-pressed="${pick.includes(t)}"><b>${short(t)}</b><small>${pick.includes(t) ? 'Khay ' + (pick.indexOf(t) + 1) : 'Bàn'}</small></button>`).join('')}</div>` :
+          `<p class="huge">Robot đang chờ</p>`}
+        <div class="actions">
+          ${station ? btn('dispatch', pick.length ? `Đã xếp đồ · Đi giao ${pick.length} bàn` : 'Chọn bàn để giao', 'primary', pick.length ? '' : 'disabled') : ''}
+          ${s.p !== App.site.dishPoint ? btn('toDish', 'Mang chén đĩa về khu rửa', station ? 'secondary' : 'primary') : ''}
+          ${btn('release', 'Xong · Cho robot về', 'secondary')}</div>`;
+    }
+  }
+  if (r.phase === 'toStop' && m) {
+    const s = m.stops[m.cur];
+    const what = { load: 'Tới lấy đồ', handoff: 'Đang giao món', collect: 'Tới thu dọn', unload: 'Mang chén đĩa', return: 'Mang đồ bị huỷ về', standby: 'Đang tới' }[s.a];
+    return `<p class="kicker">${esc(m.label)}</p><p class="big">${what}</p><p class="huge">${esc(pname(s.p))}</p>
+      <p class="sub" id="timer"></p>${m.kind === 'deliver' && m.loaded ? trayList(m, x => x.a === 'handoff') : ''}`;
+  }
+  if (r.phase === 'toDock') return `<p class="kicker">Hoàn tất</p><p class="huge">Về trạm sạc</p><p class="sub">Robot sẵn sàng nhận nhiệm vụ mới trên đường về.</p>`;
+  return `<p class="kicker">${esc(pname(r.at || r.dock))}</p><p class="huge">${r.charging ? 'Đang sạc' : 'Sẵn sàng'}</p>
+    <p class="sub">${r.charging ? 'Pin yếu — robot tạm ngừng nhận nhiệm vụ đến khi sạc đủ.' : 'Chờ nhiệm vụ từ các trạm.'}</p>`;
+}
+
+let r = null, m = null;
+function render() {
+  if (!App.state) return;
+  r = App.state.robots.find(x => x.id === ID);
+  m = missionOf(r);
+  if (!(r && r.phase === 'atStop' && m && m.stops[m.cur].a === 'standby')) pick = [];
+  setHTML($('view'), view(r, m));
+  $('estop').hidden = !r || r.halt === 'estop';
+  if (r) $('bat').textContent = `🔋 ${Math.round(r.battery)}%${r.charging ? ' · sạc' : ''}`;
+  tick();
+}
+// Time-varying text lives outside the HTML diff so buttons are not re-created every second.
+function tick() {
+  const t = $('timer');
+  if (!t || !r) return;
+  if (r.phase === 'toStop') t.textContent = `Còn khoảng ${etaSec(r)} giây`;
+  if (r.phase === 'atStop') t.textContent = `Robot tự quay về sau ${Math.max(0, App.site.timing.handoffSec - Math.round((serverNow() - r.waitSince) / 1000))} giây.`;
+}
+
+$('view').addEventListener('click', e => {
+  const t = e.target.closest('[data-t]');
+  if (t) {
+    const id = t.dataset.t;
+    if (pick.includes(id)) pick = pick.filter(x => x !== id);
+    else if (pick.length < App.site.trays) pick.push(id);
+    return render();
+  }
+  const b = e.target.closest('[data-act]');
+  if (!b || !r) return;
+  const a = b.dataset.act, base = { robot: ID, by: BY };
+  if (a === 'confirm') {
+    const s = m.stops[m.cur];
+    send({ type: 'confirm', ...base, by: s.a === 'handoff' ? 'Khách ' + pname(s.p) : BY, mission: m.id, stop: m.cur });
+  }
+  if (a === 'cancelStop') armed('cx', () => send({ type: 'cancelStop', mission: m.id, stop: m.cur, why: 'customer', by: 'Khách ' + pname(m.stops[m.cur].p) }), render);
+  if (a === 'cancel') armed('cm', () => send({ type: 'cancel', mission: m.id, by: BY }), render);
+  if (a === 'resume') {
+    if (r.halt === 'estop') armed('rs', () => send({ type: 'resume', ...base, atRobot: true }), render);
+    else send({ type: 'resume', ...base });
+  }
+  if (a === 'clear') send({ type: 'clear', ...base });
+  if (a === 'dispatch') { send({ type: 'dispatch', ...base, mission: m.id, tables: pick }); pick = []; }
+  if (a === 'toDish') send({ type: 'dispatch', ...base, mission: m.id, toDish: true });
+  if (a === 'release') send({ type: 'dispatch', ...base, mission: m.id, release: true });
+});
+
+connect(msg => {
+  if (msg.type === 'state') render();
+  if (msg.type === 'event' && msg.robot === ID && msg.robotSound) play(msg.robotSound);
+});
+setInterval(tick, 1000);
+</script>
+</body></html>

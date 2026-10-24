@@ -1,0 +1,372 @@
+'use strict';
+// MEKONIQ Serve S1 — Mission Orchestrator (CORE): queue, mission state machine, alerts, KPI.
+// Pure logic: handle(st, site, input, now) -> { ui: [{payload, session?}], cmds: [adapter cmd] }.
+// It only talks to robots through the adapter contract, so the simulator can be swapped for a
+// vendor gateway without touching this file:
+//   cmds   -> {cmd:'goto', robot, x, y, token} | {cmd:'stop'|'resume', robot} | {cmd:'sim', robot, fault} | {cmd:'reset'}
+//   events <- {event:'telemetry', robots:[{id, x, y, battery, moving, blocked}]} | {event:'arrived', robot, token}
+// NOTE: this is not a safety system. Physical E-stop / collision safety must live on the robot.
+
+const OFFLINE_SEC = 3;
+const KEEP_LOG = 60, KEEP_HISTORY = 30;
+const ACTION_VI = { load: 'Xếp đồ lên khay', handoff: 'Giao cho khách', collect: 'Thu chén đĩa', unload: 'Dỡ chén đĩa', return: 'Trả lại món bị huỷ', standby: 'Chờ lệnh' };
+const STATUS_VI = { done: 'hoàn thành', cancelled: 'đã huỷ', failed: 'chuyển xử lý thủ công' };
+const ARRIVE_SOUND = { load: 'load', handoff: 'arrived', collect: 'collect', unload: 'unload', return: 'unload', standby: 'standby' };
+const SIM_FAULTS = ['block', 'clear', 'offline', 'online', 'lowbat'];
+
+let lastSnap = '';
+
+function init(site, now) {
+  const st = { seq: 0, alertSeq: 0, robots: {}, missions: [], history: [], log: [], alerts: [],
+    kpi: { delivered: 0, cancelledCustomer: 0, cancelledStaff: 0, timeout: 0, failed: 0, interventions: 0, deliverySecSum: 0 } };
+  sync(st, site, now);
+  return st;
+}
+
+// Adds robots that appear in site.json after state was persisted.
+function sync(st, site, now) {
+  for (const { id, dock } of site.robots) {
+    if (st.robots[id]) continue;
+    const p = site.points[dock];
+    st.robots[id] = { id, dock, x: p.x, y: p.y, battery: 100, phase: 'idle', at: dock, target: null, token: 0,
+      mission: null, halt: null, offline: false, charging: false, lastSeen: now, waitSince: 0, lastRemind: 0, waitAlerted: false };
+  }
+}
+
+const open = s => s.status === 'pending' || s.status === 'active';
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const pname = (c, id) => (c.site.points[id] || {}).name || id;
+const findM = (c, id) => c.st.missions.find(m => m.id === id);
+
+function label(c, m) {
+  const tables = m.stops.filter(s => s.a === 'handoff').map(s => pname(c, s.p).replace('Bàn ', '')).join(', ');
+  if (m.kind === 'deliver') return `#${m.id} Giao ${pname(c, m.stops[0].p)} → Bàn ${tables}`;
+  if (m.kind === 'bus') return `#${m.id} Thu dọn ${pname(c, m.stops[0].p)}`;
+  return `#${m.id} Gọi robot tới ${pname(c, m.stops[0].p)}`;
+}
+
+function log(c, level, text, robot) {
+  c.st.log.unshift({ t: c.now, level, text, robot });
+  c.st.log.length = Math.min(c.st.log.length, KEEP_LOG);
+}
+function alert(c, key, level, text, robot) {
+  if (c.st.alerts.some(a => a.key === key)) return;
+  c.st.alerts.unshift({ id: ++c.st.alertSeq, key, t: c.now, level, text, robot });
+  c.st.alerts.length = Math.min(c.st.alerts.length, 20);
+}
+const resolve = (c, key) => { c.st.alerts = c.st.alerts.filter(a => a.key !== key); };
+// Client-side cues. robotSound -> robot screen, stationSound -> stations (filtered by point), table -> customer page.
+const ev = (c, e) => c.ui.push({ payload: JSON.stringify({ type: 'event', t: c.now, ...e }) });
+
+function goTo(c, r, point, phase) {
+  const p = c.site.points[point];
+  r.target = point; r.at = null; r.phase = phase; r.token++; r.waitAlerted = false;
+  c.cmds.push({ cmd: 'goto', robot: r.id, x: p.x, y: p.y, token: r.token });
+}
+
+// Moves a mission to its next open stop, or finishes it.
+function advance(c, m) {
+  // Nothing loaded and no table left to serve -> nothing to fetch either.
+  if (m.kind === 'deliver' && !m.loaded && !m.stops.some(s => s.a === 'handoff' && open(s)))
+    for (const s of m.stops) if (open(s)) s.status = 'skipped';
+  const i = m.stops.findIndex(open);
+  if (i < 0) return finish(c, m);
+  if (m.status !== 'active') return;
+  const s = m.stops[i];
+  if (s.status === 'active' && m.cur === i) return;   // already serving this stop
+  s.status = 'active'; m.cur = i;
+  goTo(c, c.st.robots[m.robot], s.p, 'toStop');
+}
+
+function finish(c, m, status) {
+  const key = { deliver: 'handoff', bus: 'collect', summon: 'standby' }[m.kind];
+  m.status = status || (m.stops.some(s => s.a === key && s.status === 'done') ? 'done' : 'cancelled');
+  m.endedAt = c.now;
+  c.st.missions = c.st.missions.filter(x => x !== m);
+  c.st.history.unshift(m);
+  c.st.history.length = Math.min(c.st.history.length, KEEP_HISTORY);
+  log(c, m.status === 'done' ? 'ok' : 'warn', `${m.label}: ${STATUS_VI[m.status]}`, m.robot);
+  const r = c.st.robots[m.robot];
+  if (r && r.mission === m.id) {
+    r.mission = null;
+    resolve(c, 'wait-' + r.id);
+    goTo(c, r, r.dock, 'toDock');   // assign() may still hand it a new mission on the way
+  }
+}
+
+function assign(c) {
+  const queue = c.st.missions.filter(m => m.status === 'queued').sort((a, b) => (b.urgent - a.urgent) || (a.createdAt - b.createdAt));
+  for (const m of queue) {
+    const first = c.site.points[m.stops.find(open).p];
+    const free = Object.values(c.st.robots).filter(r => !r.mission && !r.halt && !r.offline && !r.charging &&
+      (m.robotPref === 'any' || m.robotPref === r.id));
+    if (!free.length) continue;
+    const r = free.reduce((a, b) => (dist(a, first) <= dist(b, first) ? a : b));   // nearest
+    m.status = 'active'; m.robot = r.id; m.startedAt = c.now; r.mission = m.id;
+    log(c, 'info', `${r.id} nhận ${m.label}`, r.id);
+    advance(c, m);
+  }
+}
+
+function create(c, d, by) {
+  const P = c.site.points;
+  const isTable = id => P[id] && P[id].kind === 'table';
+  const pref = d.robot === 'any' || c.st.robots[d.robot] ? d.robot : null;
+  if (!pref) return;
+  let stops;
+  if (d.kind === 'deliver') {
+    const tables = [...new Set(Array.isArray(d.tables) ? d.tables : [])].filter(isTable).slice(0, c.site.trays);
+    if (!tables.length || !P[d.from] || P[d.from].kind !== 'station') return;
+    stops = [{ p: d.from, a: 'load' }, ...tables.map((p, i) => ({ p, a: 'handoff', tray: i + 1 }))];
+  } else if (d.kind === 'bus') {
+    if (!isTable(d.table)) return;
+    stops = [{ p: d.table, a: 'collect' }, { p: c.site.dishPoint, a: 'unload' }];
+  } else if (d.kind === 'summon') {
+    if (!P[d.to] || P[d.to].kind === 'dock') return;
+    stops = [{ p: d.to, a: 'standby' }];
+  } else return;
+  const m = { id: ++c.st.seq, kind: d.kind, by, urgent: !!d.urgent, robotPref: pref, createdAt: c.now, status: 'queued',
+    robot: null, loaded: false, cur: -1, note: String(d.note || '').slice(0, 80), stops: stops.map(s => ({ ...s, status: 'pending' })) };
+  m.label = label(c, m);
+  c.st.missions.push(m);
+  log(c, 'info', `${by} tạo ${m.label}${m.urgent ? ' (GẤP)' : ''}${pref !== 'any' ? ' cho ' + pref : ''}`);
+}
+
+// Drops one stop. Food already on a tray must go back to where it was loaded, never be abandoned.
+function dropStop(c, m, i, by, why) {
+  const s = m.stops[i];
+  s.by = by; s.why = why;
+  if (s.a === 'handoff') c.st.kpi[why === 'customer' ? 'cancelledCustomer' : why === 'timeout' ? 'timeout' : 'cancelledStaff']++;
+  if (s.a === 'handoff' && m.loaded) {
+    s.status = 'cancelled';
+    let ret = m.stops.find(x => x.a === 'return' && open(x));
+    if (!ret) m.stops.push(ret = { p: m.stops[0].p, a: 'return', status: 'pending', trays: [] });
+    ret.trays.push({ tray: s.tray, table: s.p });
+  } else s.status = 'skipped';
+}
+
+function cancelMission(c, m, by, why) {
+  m.stops.forEach((s, i) => { if (open(s) && !['unload', 'return'].includes(s.a)) dropStop(c, m, i, by, why); });
+  for (const s of m.stops) if (open(s) && s.a === 'unload' && !m.loaded) s.status = 'skipped';
+  const back = m.stops.some(s => open(s));
+  log(c, 'warn', `${by} huỷ ${m.label}${back ? ' — robot mang đồ về ' + pname(c, m.stops.find(open).p) : ''}`, m.robot);
+  if (m.status === 'queued') return finish(c, m, 'cancelled');
+  if (back) ev(c, { robot: m.robot, robotSound: 'cancel', text: `${m.robot} quay lại ${pname(c, m.stops.find(open).p)}` });
+  advance(c, m);
+}
+
+function cancelStop(c, m, i, by, why) {
+  const s = m.stops[i];
+  if (!s || s.a !== 'handoff' || !open(s)) return;
+  const here = m.status === 'active' && m.cur === i && c.st.robots[m.robot].phase === 'atStop';
+  dropStop(c, m, i, by, why);
+  const tail = m.loaded ? ` — ${m.robot} mang khay ${s.tray} về ${pname(c, m.stops[0].p)}` : ' (chưa xếp khay)';
+  log(c, 'warn', `${by} huỷ món ${pname(c, s.p)} của ${m.label}${tail}`, m.robot);
+  ev(c, { table: s.p, stationSound: 'cancelled', point: m.stops[0].p, robot: here ? m.robot : undefined, robotSound: here ? 'cancel' : undefined,
+    text: `${pname(c, s.p)} huỷ món${tail}` });
+  advance(c, m);
+}
+
+function confirm(c, r, d, by) {
+  const m = findM(c, r.mission);
+  if (!m || r.phase !== 'atStop' || d.mission !== m.id || d.stop !== m.cur) return;   // stale / double tap
+  const s = m.stops[m.cur];
+  s.status = 'done'; s.doneAt = c.now; s.by = by;
+  if (s.a === 'load' || s.a === 'collect') m.loaded = true;
+  if (s.a === 'unload' || s.a === 'return') m.loaded = false;
+  if (s.a === 'handoff') {
+    c.st.kpi.delivered++;
+    c.st.kpi.deliverySecSum += (c.now - m.createdAt) / 1000;
+    ev(c, { robot: r.id, robotSound: 'thanks', table: s.p, text: `${pname(c, s.p)} đã nhận món` });
+  }
+  resolve(c, 'wait-' + r.id);
+  log(c, 'ok', `${r.id} · ${pname(c, s.p)}: ${ACTION_VI[s.a]} ✓`, r.id);
+  advance(c, m);
+}
+
+// A robot summoned to a spot gets its next job from the robot screen.
+function dispatch(c, r, d, by) {
+  const m = findM(c, r.mission);
+  if (!m || m.kind !== 'summon' || r.phase !== 'atStop' || d.mission !== m.id) return;
+  const P = c.site.points, s = m.stops[m.cur];
+  if (d.release) { s.status = 'done'; log(c, 'info', `${by} cho ${r.id} về`, r.id); return advance(c, m); }
+  if (d.toDish) {
+    if (s.p === c.site.dishPoint) return;
+    Object.assign(s, { a: 'collect', status: 'done' });
+    m.kind = 'bus'; m.loaded = true;
+    m.stops.push({ p: c.site.dishPoint, a: 'unload', status: 'pending' });
+  } else {
+    const tables = [...new Set(Array.isArray(d.tables) ? d.tables : [])].filter(t => P[t] && P[t].kind === 'table').slice(0, c.site.trays);
+    if (!tables.length || P[s.p].kind !== 'station') return;
+    Object.assign(s, { a: 'load', status: 'done' });
+    m.kind = 'deliver'; m.loaded = true;
+    tables.forEach((p, i) => m.stops.push({ p, a: 'handoff', tray: i + 1, status: 'pending' }));
+  }
+  m.label = label(c, m);
+  log(c, 'info', `${by} giao việc cho ${r.id}: ${m.label}`, r.id);
+  resolve(c, 'wait-' + r.id);
+  advance(c, m);
+}
+
+function telemetry(c, list) {
+  const { st, site, now } = c;
+  for (const t of list) {
+    const r = st.robots[t.id];
+    if (!r) continue;
+    r.x = t.x; r.y = t.y; r.battery = t.battery; r.lastSeen = now;
+    if (r.offline) { r.offline = false; resolve(c, 'off-' + r.id); log(c, 'ok', `${r.id} đã kết nối lại`, r.id); }
+    if (t.blocked && !r.halt) {
+      r.halt = 'blocked'; st.kpi.interventions++;
+      alert(c, 'blk-' + r.id, 'error', `${r.id} bị chặn đường — cần nhân viên dọn lối đi`, r.id);
+      ev(c, { robot: r.id, robotSound: 'blocked', stationSound: 'alert', text: `${r.id} bị chặn đường` });
+    }
+    if (!t.blocked && r.halt === 'blocked') {
+      r.halt = null; r.waitSince = now; resolve(c, 'blk-' + r.id); log(c, 'ok', `${r.id} đã thông đường, chạy tiếp`, r.id);
+    }
+    if (!r.charging && r.battery < site.timing.lowBattery) {
+      r.charging = true;
+      log(c, 'warn', `${r.id} pin yếu (${Math.round(r.battery)}%) — xong việc sẽ về sạc, tạm ngừng nhận nhiệm vụ`, r.id);
+    }
+    if (r.charging && r.battery >= site.timing.chargedBattery) { r.charging = false; log(c, 'ok', `${r.id} đã sạc đủ, sẵn sàng`, r.id); }
+  }
+  for (const r of Object.values(st.robots)) {
+    if (!r.offline && now - r.lastSeen > OFFLINE_SEC * 1000) {
+      r.offline = true;
+      alert(c, 'off-' + r.id, 'error', `${r.id} mất kết nối — kiểm tra Wi-Fi / nguồn robot`, r.id);
+      ev(c, { stationSound: 'alert', text: `${r.id} mất kết nối` });
+    }
+  }
+}
+
+// Waiting-time rules while a robot stands at a stop.
+function timers(c) {
+  const T = c.site.timing;
+  for (const r of Object.values(c.st.robots)) {
+    if (r.phase !== 'atStop' || r.halt || r.offline) continue;
+    const m = findM(c, r.mission), s = m.stops[m.cur];
+    const waited = (c.now - r.waitSince) / 1000;
+    if (s.a === 'handoff') {
+      if (waited >= T.handoffSec) {
+        alert(c, `to-${m.id}-${m.cur}`, 'warn', `${pname(c, s.p)} không nhận món sau ${T.handoffSec}s — ${r.id} mang về`, r.id);
+        cancelStop(c, m, m.cur, 'Hệ thống (quá giờ)', 'timeout');
+      } else if ((c.now - r.lastRemind) / 1000 >= T.remindSec) {
+        r.lastRemind = c.now;
+        ev(c, { robot: r.id, robotSound: 'remind', table: s.p, text: `Nhắc ${pname(c, s.p)} nhận món` });
+      }
+    } else if (s.a === 'standby') {
+      if (waited >= T.standbySec) { s.status = 'done'; log(c, 'info', `${r.id} chờ quá lâu tại ${pname(c, s.p)}, tự về`, r.id); advance(c, m); }
+    } else if (waited >= T.loadSec && !r.waitAlerted) {
+      r.waitAlerted = true;
+      if (s.a === 'load' || s.a === 'collect') {
+        alert(c, `to-${m.id}-${m.cur}`, 'warn', `Không ai xếp đồ cho ${r.id} tại ${pname(c, s.p)} — đã huỷ ${m.label}`, r.id);
+        cancelMission(c, m, 'Hệ thống (quá giờ)', 'timeout');
+      } else {
+        alert(c, 'wait-' + r.id, 'warn', `${r.id} đang chờ dỡ đồ tại ${pname(c, s.p)}`, r.id);
+        ev(c, { stationSound: 'alert', point: s.p, text: `${r.id} chờ dỡ đồ tại ${pname(c, s.p)}` });
+      }
+    }
+  }
+}
+
+function fromUI(c, d, session) {
+  const { st } = c;
+  const by = String(d.by || 'Không rõ').slice(0, 40);
+  const r = st.robots[d.robot];
+  const m = typeof d.mission === 'number' ? findM(c, d.mission) : null;
+  switch (d.type) {
+    case 'hello':
+      c.ui.push({ session, payload: JSON.stringify({ type: 'site', site: c.site }) });
+      c.force = true;
+      return;
+    case 'create': return create(c, d, by);
+    case 'cancel':
+      if (m && !(m.loaded && m.kind === 'bus')) cancelMission(c, m, by, 'staff');   // dirty dishes still go to the dish area
+      return;
+    case 'cancelStop': if (m) cancelStop(c, m, d.stop, by, d.why === 'customer' ? 'customer' : 'staff'); return;
+    case 'confirm': if (r) confirm(c, r, d, by); return;
+    case 'dispatch': if (r) dispatch(c, r, d, by); return;
+    case 'estop':   // simulates the physical E-stop on the robot body
+      if (!r || r.halt === 'estop') return;
+      r.halt = 'estop'; st.kpi.interventions++;
+      c.cmds.push({ cmd: 'stop', robot: r.id });
+      alert(c, 'es-' + r.id, 'error', `${r.id} DỪNG KHẨN CẤP — kiểm tra tại robot rồi nhả dừng`, r.id);
+      ev(c, { robot: r.id, robotSound: 'estop', stationSound: 'alert', text: `${r.id} dừng khẩn cấp` });
+      log(c, 'error', `${by}: ${r.id} dừng khẩn cấp`, r.id);
+      return;
+    case 'pause':
+      if (!r || r.halt) return;
+      r.halt = 'paused'; c.cmds.push({ cmd: 'stop', robot: r.id });
+      alert(c, 'pa-' + r.id, 'warn', `${r.id} đang tạm dừng (${by})`, r.id);
+      log(c, 'warn', `${by} tạm dừng ${r.id}`, r.id);
+      return;
+    case 'resume':
+      // E-stop may only be released at the robot itself.
+      if (!r || !(r.halt === 'paused' || (r.halt === 'estop' && d.atRobot))) return;
+      resolve(c, 'es-' + r.id); resolve(c, 'pa-' + r.id);
+      r.halt = null; r.waitSince = r.lastRemind = c.now;
+      c.cmds.push({ cmd: 'resume', robot: r.id });
+      log(c, 'ok', `${by} cho ${r.id} chạy tiếp`, r.id);
+      return;
+    case 'clear':   // staff removed the obstacle (sim: lifts the injected block)
+      if (r && r.halt === 'blocked') { c.cmds.push({ cmd: 'sim', robot: r.id, fault: 'clear' }); log(c, 'info', `${by} đã dọn lối cho ${r.id}`, r.id); }
+      return;
+    case 'manual': {   // manual fallback: staff finishes the job by hand
+      const mm = r && findM(c, r.mission);
+      if (!mm) return;
+      for (const s of mm.stops) if (open(s)) s.status = 'manual';
+      st.kpi.failed++; st.kpi.interventions++;
+      log(c, 'error', `${by} chuyển ${mm.label} sang xử lý thủ công`, r.id);
+      return finish(c, mm, 'failed');
+    }
+    case 'ack': st.alerts = st.alerts.filter(a => a.id !== d.alert); return;
+    case 'sim': if (r && SIM_FAULTS.includes(d.fault)) c.cmds.push({ cmd: 'sim', robot: r.id, fault: d.fault }); return;
+    case 'reset':
+      for (const k of Object.keys(st)) delete st[k];
+      Object.assign(st, init(c.site, c.now));
+      c.cmds.push({ cmd: 'reset' });
+      log(c, 'info', `${by} khởi động lại demo`);
+      return;
+  }
+}
+
+function snapshot(st) {
+  return {
+    robots: Object.values(st.robots).map(({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince }) =>
+      ({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince })),
+    missions: st.missions, history: st.history.slice(0, 15), log: st.log.slice(0, 40), alerts: st.alerts, kpi: st.kpi
+  };
+}
+
+// input: {source:'ui', data, session} | {source:'adapter', data}
+function handle(st, site, input, now) {
+  const c = { st, site, now, ui: [], cmds: [], force: false };
+  sync(st, site, now);
+  const d = input.data;
+  if (d && typeof d === 'object') {
+    if (input.source === 'adapter') {
+      if (d.event === 'telemetry') { telemetry(c, Array.isArray(d.robots) ? d.robots : []); timers(c); }
+      else if (d.event === 'arrived' && st.robots[d.robot]) arrived(c, st.robots[d.robot], d.token);
+    } else fromUI(c, d, input.session);
+  }
+  assign(c);
+  const snap = JSON.stringify(snapshot(st));
+  if (c.force || snap !== lastSnap) {
+    lastSnap = snap;
+    c.ui.push({ payload: `{"type":"state","now":${now},${snap.slice(1)}` });
+  }
+  return { ui: c.ui, cmds: c.cmds };
+}
+
+function arrived(c, r, token) {
+  if (token !== r.token || !r.target) return;
+  r.at = r.target; r.target = null;
+  if (r.phase === 'toDock') { r.phase = 'idle'; return; }
+  if (r.phase !== 'toStop') return;
+  r.phase = 'atStop'; r.waitSince = r.lastRemind = c.now;
+  const m = findM(c, r.mission), s = m.stops[m.cur];
+  ev(c, { robot: r.id, robotSound: ARRIVE_SOUND[s.a], point: s.p, table: s.p,
+    stationSound: ['load', 'unload', 'return'].includes(s.a) ? 'ding' : undefined,
+    text: `${r.id} đã đến ${pname(c, s.p)} — ${ACTION_VI[s.a]}` });
+}
+
+module.exports = { init, handle, ACTION_VI };

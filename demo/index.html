@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MEKONIQ Serve · Demo</title>
+<meta name="description" content="Demo tương tác MEKONIQ Serve S1: trạm bếp, pha chế, dọn bàn, màn hình robot và QR tại bàn.">
+<link rel="icon" href="logo.svg"><link rel="stylesheet" href="brand.css">
+<style>
+  .hero { background: var(--deep); color: #fff; padding: 48px 16px; }
+  .hero > div { max-width: 1100px; margin: auto; }
+  .hero h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.05em; line-height: 1.04; margin: 0 0 12px; }
+  .hero h1 span { color: var(--mint); }
+  .hero p { color: #bad0ca; max-width: 62ch; margin: 0 0 20px; font-size: 17px; }
+  .hero .eyebrow { color: var(--mint); }
+  .hero .btn { min-height: 48px; font-size: 14px; }
+  .hero .btn:not(.primary) { color: #fff; border-color: #688782; }
+  main { max-width: 1100px; margin: auto; padding: 24px 16px 64px; display: grid; gap: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .tile { display: block; text-decoration: none; padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); }
+  .tile:hover { border-color: var(--green); }
+  .tile b { display: block; font-size: 17px; }
+  .tile span { font-size: 13px; color: var(--muted); }
+  .tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 8px; }
+  .tgrid a { text-align: center; padding: 12px 0; border-radius: 12px; border: 1px solid var(--line); text-decoration: none; font-weight: 800; background: var(--card); }
+  ol.script { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+  ol.script b { color: var(--green); }
+  .note { font-size: 13px; color: var(--muted); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+</style>
+</head><body>
+<header class="top"><div class="nav"><div id="brand"></div><a class="btn sm" href="../">← Trang giới thiệu</a></div></header>
+<section class="hero"><div>
+  <p class="eyebrow">Demo tương tác · chạy hoàn toàn trong trình duyệt</p>
+  <h1>Thử điều phối robot <span>như một ca làm thật.</span></h1>
+  <p>Ba robot giả lập, mười hai bàn, nhiều trạm cùng lúc. Gọi robot, giao nhiều bàn một chuyến, huỷ món, xử lý sự cố — tất cả đồng bộ giữa các tab của trình duyệt này.</p>
+  <div class="row"><a class="btn primary" href="showcase.html">▶ Chế độ trình diễn (3 màn hình)</a><a class="btn" href="station.html?role=bep" target="_blank">Mở trạm bếp ↗</a></div>
+</div></section>
+<main>
+  <div class="card"><p class="eyebrow">Kịch bản 2 phút</p>
+    <ol class="script">
+      <li><b>Trạm bếp:</b> chọn Bàn 05 và Bàn 07 → “Gửi robot giao”. Robot gần nhất nhận việc.</li>
+      <li><b>Màn robot:</b> khi robot tới bếp, bấm “Đã xếp xong · Đi giao”.</li>
+      <li><b>Khách Bàn 05:</b> robot tới bàn, đọc thông báo tiếng Việt → bấm “Đã nhận món”.</li>
+      <li><b>Khách Bàn 07</b> (trang QR): bấm “Huỷ món này” → robot tự mang khay 2 về bếp.</li>
+      <li><b>Sự cố:</b> ở cuối trang trạm, mô phỏng “Vật cản” hoặc bấm nút DỪNG trên robot → mọi trạm nhận cảnh báo.</li>
+    </ol>
+  </div>
+  <div class="card"><p class="eyebrow">Máy trạm (nhân viên)</p><div class="grid" id="stations"></div>
+    <p class="note">Mỗi trạm chỉ nghe thông báo ở khu vực của mình; cảnh báo sự cố thì mọi trạm đều nhận.</p></div>
+  <div class="card"><p class="eyebrow">Màn hình trên robot</p><div class="grid" id="robots"></div></div>
+  <div class="card"><p class="eyebrow">Khách hàng · QR tại bàn</p><div class="tgrid" id="tables"></div></div>
+  <div class="card"><p class="eyebrow">Về bản demo này</p>
+    <p class="note">Bộ điều phối và robot giả lập chạy ngay trong trình duyệt của bạn — cùng mã nguồn với bản chạy trên Node-RED tại nhà hàng. Không gửi dữ liệu đi đâu. Các tab/cửa sổ trong <b>cùng trình duyệt</b> đồng bộ với nhau; thiết bị khác sẽ có nhà hàng mô phỏng riêng. Robot di chuyển theo đường thẳng, không phải dẫn đường thật.</p>
+    <div class="row"><button class="btn sm" id="reset">↺ Xoá dữ liệu demo</button></div></div>
+</main>
+<script src="transport.js"></script><script src="common.js"></script>
+<script>
+document.getElementById('brand').innerHTML = BRAND('Serve S1 · Demo');
+const DESC = { bep: 'Giao món ra bàn, gọi robot về bếp', bar: 'Giao đồ uống từ quầy', don: 'Gọi robot thu dọn, mang chén về khu rửa', ql: 'Giám sát đội robot, xử lý sự cố' };
+document.getElementById('reset').onclick = e => armed('reset', () => send({ type: 'reset', by: 'Trang demo' }),
+  () => { e.target.textContent = isArmed('reset') ? 'Chạm lần nữa để xoá' : '↺ Xoá dữ liệu demo'; e.target.classList.toggle('armed', isArmed('reset')); });
+connect(m => {
+  if (m.type !== 'site') return;
+  const S = App.site;
+  document.getElementById('stations').innerHTML = S.roles.map(r =>
+    `<a class="tile" href="station.html?role=${r.id}" target="_blank"><b>${esc(r.name)}</b><span>${DESC[r.id] || ''}</span></a>`).join('');
+  document.getElementById('robots').innerHTML = S.robots.map(r =>
+    `<a class="tile" href="robot.html?robot=${r.id}" target="_blank"><b>🤖 Robot ${r.id}</b><span>Tablet gắn trên robot</span></a>`).join('');
+  document.getElementById('tables').innerHTML = Object.keys(S.points).filter(k => S.points[k].kind === 'table').map(t =>
+    `<a href="table.html?t=${t}" target="_blank">${short(t)}</a>`).join('');
+});
+</script>
+</body></html>

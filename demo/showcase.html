@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="vi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MEKONIQ Serve · Trình diễn</title>
+<meta name="description" content="Bếp, robot và khách hàng trên cùng một màn hình — demo MEKONIQ Serve S1 chạy hoàn toàn trong trình duyệt.">
+<link rel="icon" href="logo.svg"><link rel="stylesheet" href="brand.css">
+<style>
+  body { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+  .stage { flex: 1; min-height: 0; display: grid; gap: 10px; padding: 10px; grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr); grid-template-rows: 1fr 1fr; }
+  .pane { position: relative; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--card); min-height: 0; }
+  .pane.main { grid-row: span 2; }
+  .pane iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .tag { position: absolute; left: 10px; bottom: 10px; z-index: 2; background: var(--deep); color: var(--mint); font-size: 11px; font-weight: 900;
+    letter-spacing: .12em; text-transform: uppercase; padding: 5px 10px; border-radius: 999px; pointer-events: none; }
+  .tag a { pointer-events: auto; color: inherit; }
+  @media (max-width: 860px) {
+    body { height: auto; }
+    .stage { grid-template-columns: 1fr; grid-template-rows: none; }
+    .pane, .pane.main { grid-row: auto; height: 85vh; }
+  }
+</style>
+</head><body>
+<header class="top"><div class="nav">
+  <div id="brand"></div>
+  <div class="navright">
+    <a class="btn sm" href="index.html">Mở từng màn hình</a>
+    <a class="btn sm primary" href="../">← Về trang giới thiệu</a>
+  </div>
+</div></header>
+<main class="stage">
+  <div class="pane main"><iframe src="station.html?role=bep" title="Màn hình trạm bếp"></iframe><span class="tag">Trạm bếp</span></div>
+  <div class="pane"><iframe src="robot.html?robot=R1" title="Màn hình trên robot R1"></iframe><span class="tag">Robot R1 · chạm để bật tiếng</span></div>
+  <div class="pane"><iframe src="table.html?t=T05" title="Trang khách Bàn 05"></iframe><span class="tag">Khách · QR Bàn 05</span></div>
+</main>
+<script src="common.js"></script>
+<script>document.getElementById('brand').innerHTML = BRAND('Serve S1 · Chế độ trình diễn');</script>
+</body></html>

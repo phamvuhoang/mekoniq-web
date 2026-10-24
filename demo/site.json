@@ -1,0 +1,39 @@
+{
+  "name": "Nhà hàng demo · MEKONIQ Serve S1",
+  "floor": { "w": 24, "h": 14 },
+  "trays": 4,
+  "dishPoint": "dish",
+  "timing": { "loadSec": 120, "handoffSec": 60, "remindSec": 15, "standbySec": 180, "lowBattery": 20, "chargedBattery": 80 },
+  "sim": { "speed": 1.2, "drainMove": 0.12, "drainIdle": 0.01, "charge": 1.5 },
+  "robots": [
+    { "id": "R1", "dock": "D1" },
+    { "id": "R2", "dock": "D2" },
+    { "id": "R3", "dock": "D3" }
+  ],
+  "roles": [
+    { "id": "bep", "name": "Bếp", "home": "kitchen", "tab": "deliver" },
+    { "id": "bar", "name": "Quầy pha chế", "home": "bar", "tab": "deliver" },
+    { "id": "don", "name": "Dọn bàn", "home": "dish", "tab": "bus" },
+    { "id": "ql", "name": "Quản lý ca", "home": null, "tab": "summon" }
+  ],
+  "points": {
+    "bar":     { "name": "Quầy pha chế", "kind": "station", "x": 3, "y": 2.5 },
+    "dish":    { "name": "Khu rửa chén", "kind": "dish", "x": 3, "y": 7 },
+    "kitchen": { "name": "Bếp", "kind": "station", "x": 3, "y": 11.5 },
+    "D1": { "name": "Sạc 1", "kind": "dock", "x": 7.5, "y": 1.2 },
+    "D2": { "name": "Sạc 2", "kind": "dock", "x": 9, "y": 1.2 },
+    "D3": { "name": "Sạc 3", "kind": "dock", "x": 10.5, "y": 1.2 },
+    "T01": { "name": "Bàn 01", "kind": "table", "x": 11.5, "y": 4.5 },
+    "T02": { "name": "Bàn 02", "kind": "table", "x": 14.5, "y": 4.5 },
+    "T03": { "name": "Bàn 03", "kind": "table", "x": 17.5, "y": 4.5 },
+    "T04": { "name": "Bàn 04", "kind": "table", "x": 20.5, "y": 4.5 },
+    "T05": { "name": "Bàn 05", "kind": "table", "x": 11.5, "y": 8 },
+    "T06": { "name": "Bàn 06", "kind": "table", "x": 14.5, "y": 8 },
+    "T07": { "name": "Bàn 07", "kind": "table", "x": 17.5, "y": 8 },
+    "T08": { "name": "Bàn 08", "kind": "table", "x": 20.5, "y": 8 },
+    "T09": { "name": "Bàn 09", "kind": "table", "x": 11.5, "y": 11.5 },
+    "T10": { "name": "Bàn 10", "kind": "table", "x": 14.5, "y": 11.5 },
+    "T11": { "name": "Bàn 11", "kind": "table", "x": 17.5, "y": 11.5 },
+    "T12": { "name": "Bàn 12", "kind": "table", "x": 20.5, "y": 11.5 }
+  }
+}
