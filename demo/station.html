@@ -1,9 +1,67 @@
 <!doctype html>
-<html lang="vi"><head>
+<html lang="vi" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MEKONIQ Serve · Trạm</title>
 <link rel="icon" href="logo.svg"><link rel="stylesheet" href="brand.css">
 <style>
+  /* Desk view: industry-style dispatch tablet — app bar, robot banner, big table tiles, command queue, two giant buttons. */
+  :root { --k-ok: #1f8a6a; --k-go: #1e6fd0; --k-warn: #e8711e; --k-danger: #d32f2f; }
+  body { background: #e9f0f3; }
+  .kbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--k-go); color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.2); flex-wrap: wrap; }
+  .kbar > a img { width: 36px; height: 36px; background: #fff; border-radius: 9px; padding: 3px; display: block; }
+  .kbar .ttl { flex: 1; min-width: 200px; font-weight: 900; font-size: clamp(15px, 2vw, 21px); text-transform: uppercase; letter-spacing: .02em; text-align: center; }
+  .kbar .btn { border-color: rgba(255,255,255,.55); color: #fff; }
+  .kbar .views { display: flex; background: rgba(0,0,0,.18); border-radius: 12px; padding: 3px; }
+  .kbar .views button { border: 0; background: transparent; color: #fff; font-weight: 850; padding: 7px 14px; border-radius: 9px; font-size: 13px; }
+  .kbar .views button[aria-pressed="true"] { background: #fff; color: var(--k-go); }
+  #clock { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .desk { max-width: 1400px; margin: auto; padding: 12px 16px 16px; display: grid; gap: 12px; }
+  .banner { border-radius: 14px; padding: 12px 16px; text-align: center; font-weight: 950; font-size: clamp(18px, 2.6vw, 26px); text-transform: uppercase; color: #0d3b22; background: #c9f0d4; border: 2px solid #8fd8a6; }
+  .banner.go { color: #0c3466; background: #d3e6fb; border-color: #98c4f3; }
+  .banner.warn { color: #6a3000; background: #ffe4cc; border-color: #ffbf8a; }
+  .banner.danger { color: #fff; background: var(--k-danger); border-color: var(--k-danger); }
+  .bar2 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .bar2 .lbl { font-size: 12px; font-weight: 900; text-transform: uppercase; color: #4b6870; letter-spacing: .05em; }
+  .chip { border: 2px solid #c8d7de; background: #fff; border-radius: 12px; padding: 7px 12px; font-weight: 850; min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
+  .chip[aria-pressed="true"] { border-color: var(--k-go); background: var(--k-go); color: #fff; }
+  .chip i { width: 10px; height: 10px; border-radius: 50%; background: #3ccf7a; display: inline-block; }
+  .chip i.go { background: #4aa3ff; } .chip i.warn { background: #ffa04d; } .chip i.danger { background: var(--k-danger); }
+  .chip small { font-weight: 700; opacity: .8; }
+  .spacer { flex: 1; }
+  .board { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px; align-items: stretch; }
+  @media (max-width: 900px) { .board { grid-template-columns: 1fr; } }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; align-content: start; }
+  .tt { position: relative; border: 2px solid #c8d7de; background: #fff; border-radius: 18px; min-height: 128px; padding: 10px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; box-shadow: 0 3px 8px rgba(20,50,70,.08); color: #12313a; }
+  .tt .k { font-size: 18px; font-weight: 900; text-transform: uppercase; }
+  .tt .n { font-size: 46px; font-weight: 950; line-height: 1; }
+  .tt .s { font-size: 13px; font-weight: 750; color: #4b6870; }
+  .tt.st .n { font-size: 30px; }
+  .tt.busy { border-color: #ffbf8a; background: #fff6ee; }
+  .tt.here { border-color: #98c4f3; background: #eef6ff; }
+  .tt[aria-pressed="true"] { background: var(--k-go); border-color: var(--k-go); color: #fff; box-shadow: 0 6px 16px rgba(30,111,208,.35); }
+  .tt[aria-pressed="true"] .s { color: #fff; }
+  .tt .tag { position: absolute; top: 8px; right: 10px; font-size: 12px; font-weight: 900; }
+  .queue { background: #fff; border-radius: 18px; padding: 14px; border: 2px solid #c8d7de; display: flex; flex-direction: column; min-height: 0; }
+  .queue h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+  .queue ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; overflow: auto; max-height: 460px; }
+  .queue li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; border-bottom: 1px solid #e3ecef; padding-bottom: 8px; font-size: 14px; }
+  .queue li b { font-size: 15px; }
+  .queue li .pill { justify-self: start; }
+  .queue li button { grid-row: span 2; }
+  .queue .empty { padding: 30px 0; }
+  .cmd { display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; }
+  .big { border: 0; border-radius: 16px; min-height: 76px; color: #fff; font-weight: 950; font-size: clamp(17px, 2.4vw, 24px); text-transform: uppercase; box-shadow: 0 6px 0 rgba(0,0,0,.18); display: flex; align-items: center; justify-content: center; gap: 10px; flex-direction: column; line-height: 1.15; padding: 8px; }
+  .big small { font-size: 13px; font-weight: 750; text-transform: none; opacity: .9; }
+  .big:active { transform: translateY(3px); box-shadow: 0 3px 0 rgba(0,0,0,.18); }
+  .big:disabled { opacity: .45; cursor: not-allowed; }
+  .big.red { background: var(--k-danger); } .big.green { background: #2e9d48; } .big.red.armed { background: #8e1c1c; animation: pulse 1s infinite; }
+  .foot { text-align: center; font-weight: 900; text-transform: uppercase; color: #12313a; font-size: 15px; }
+  .foot span { color: #4b6870; font-weight: 750; text-transform: none; margin-left: 14px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .opts input[type=text] { width: 260px; min-height: 44px; }
+  .opts .check { background: #fff; border: 2px solid #c8d7de; border-radius: 12px; padding: 0 12px; min-height: 44px; }
+  .opts .check:has(input:checked) { border-color: var(--k-warn); background: #fff1e6; }
+
   .alerts { max-width: 1400px; margin: 12px auto 0; padding: 0 16px; display: grid; gap: 8px; }
   .alerts:empty { display: none; }
   .alert { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 14px; font-weight: 700; border: 1px solid var(--line); background: var(--card); }
@@ -16,12 +74,6 @@
   .two { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; align-items: start; }
   @media (max-width: 1100px) { .two { grid-template-columns: 1fr; } }
   @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
-  #create { position: sticky; top: 76px; }
-  @media (max-width: 860px) { #create { position: static; } }
-  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--soft); padding: 4px; border-radius: 14px; margin-bottom: 16px; }
-  .tabs button { border: 0; background: transparent; border-radius: 10px; padding: 9px 4px; font-weight: 800; font-size: 13px; }
-  .tabs button[aria-pressed="true"] { background: var(--card); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-  .submit { width: 100%; min-height: 52px; font-size: 15px; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
   /* Map */
@@ -75,19 +127,27 @@
   .roles button { min-height: 64px; }
 </style>
 </head><body>
-<header class="top"><div class="nav">
-  <div id="brand"></div>
-  <div class="navright">
-    <button class="btn sm" id="who" title="Đổi trạm">📍 …</button>
-    <button class="btn sm" id="snd">🔇 Bật âm thanh</button>
-    <span class="dot" id="conn" title="Kết nối hệ thống"></span>
-  </div>
-</div></header>
+<header class="kbar">
+  <a href="index.html" title="MEKONIQ Serve"><img src="logo.svg" alt="MEKONIQ"></a>
+  <div class="views" id="views"><button data-view="desk" aria-pressed="true">Điều phối</button><button data-view="mon" aria-pressed="false">Giám sát & sơ đồ</button></div>
+  <span class="ttl" id="ttl">Hệ thống điều phối robot</span>
+  <button class="btn sm" id="who" title="Đổi trạm">📍 …</button>
+  <button class="btn sm" id="snd">🔇 Bật âm thanh</button>
+  <span id="clock"></span><span class="dot" id="conn" title="Kết nối hệ thống"></span>
+</header>
 <div id="alerts" class="alerts" aria-live="assertive"></div>
 
-<main class="layout">
-  <aside class="card" id="create"></aside>
-  <section class="stack">
+<main class="desk" id="desk">
+  <div class="banner" id="banner">Đang kết nối…</div>
+  <div class="bar2" id="robots"></div>
+  <div class="bar2" id="task"></div>
+  <div class="board"><div class="grid" id="grid"></div><aside class="queue"><h3 id="qhead">Hàng chờ lệnh</h3><ol id="queue"></ol></aside></div>
+  <div class="cmd" id="cmd"></div>
+  <div class="foot" id="foot"></div>
+</main>
+
+<main class="layout" id="mon" hidden>
+  <section class="stack" style="grid-column:1/-1">
     <div class="card"><p class="eyebrow">Sơ đồ nhà hàng · lối đi của robot</p>
       <div class="maptools"><div class="seg" id="mode"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="obClear">Gỡ hết vật cản</button><a class="btn sm" href="map.html" target="_blank">✏️ Thiết kế lộ trình ↗</a></div></div>
@@ -114,7 +174,6 @@
 
 <script src="transport.js"></script><script src="common.js"></script>
 <script>
-document.getElementById('brand').innerHTML = BRAND('Serve S1 · Trạm điều phối');
 const $ = id => document.getElementById(id);
 
 // ---- Station identity (per device, remembered locally) ----
@@ -142,47 +201,85 @@ function applyRole() {
   $('who').textContent = '📍 ' + by() + (me && me.name && me.name !== role().name ? ' · ' + role().name : '');
   F.tab = role().tab;
   F.from = role().home && App.site.points[role().home].kind === 'station' ? role().home : 'kitchen';
-  renderForm(); renderMap();
+  $('ttl').textContent = 'Hệ thống điều phối robot · ' + by();
+  choose();
 }
 $('who').onclick = openSetup;
 $('snd').onclick = e => { enableSound(); e.target.textContent = '🔊 Âm thanh bật'; e.target.disabled = true; };
 
-// ---- Create-mission form ----
+// ---- Desk: pick robot + task + tables on big tiles, then one big "call" button ----
 const F = { tab: 'deliver', from: 'kitchen', tables: [], table: null, to: null, robot: 'any', urgent: false, note: '' };
 const tableIds = () => Object.keys(App.site.points).filter(k => App.site.points[k].kind === 'table');
 const press = (cond) => `aria-pressed="${!!cond}"`;
-function tableGrid(isSel) {
-  return `<div class="tables">${tableIds().map(t => `<button class="pick" data-f="t:${t}" ${press(isSel(t))}><b>${short(t)}</b><small>Bàn</small></button>`).join('')}</div>`;
+const TASKS = { deliver: ['🍽 Giao món', 'Gọi robot & giao đến bàn'], bus: ['🧺 Thu dọn bàn', 'Gọi robot thu dọn'], summon: ['📣 Gọi robot tới', 'Gọi robot tới nơi'] };
+const selected = () => F.tab === 'deliver' ? F.tables : [F.tab === 'bus' ? F.table : F.to].filter(Boolean);
+const sortMissions = () => App.state.missions.slice().sort((a, b) => (a.status === 'active' ? 0 : 1) - (b.status === 'active' ? 0 : 1) || (b.urgent - a.urgent) || a.createdAt - b.createdAt);
+function missionStatus(m) {
+  return m.status === 'queued' ? ['Chờ ' + (m.robotPref === 'any' ? 'robot rảnh' : m.robotPref), 'warn'] : robotStatus(App.state.robots.find(x => x.id === m.robot));
 }
-function renderForm() {
-  const S = App.site, P = S.points;
-  const stations = Object.keys(P).filter(k => P[k].kind === 'station');
-  const robots = ['any', ...S.robots.map(r => r.id)];
-  let body = '';
-  if (F.tab === 'deliver') body = `
-    <div class="field"><span class="label">Lấy đồ tại</span><div class="seg">${stations.map(s => `<button data-f="from:${s}" ${press(F.from === s)}>${esc(P[s].name)}</button>`).join('')}</div></div>
-    <div class="field"><span class="label">Giao tới bàn · tối đa ${S.trays} khay (${F.tables.length}/${S.trays})</span>${tableGrid(t => F.tables.includes(t))}
-      <div class="hint">${F.tables.length ? 'Thứ tự khay: ' + F.tables.map((t, i) => `K${i + 1}→${short(t)}`).join(' · ') : 'Chọn một hoặc nhiều bàn — robot giao lần lượt.'}</div></div>`;
-  if (F.tab === 'bus') body = `
-    <div class="field"><span class="label">Bàn cần thu dọn</span>${tableGrid(t => F.table === t)}
-      <div class="hint">Robot tới bàn, chờ đặt chén đĩa, rồi mang về ${esc(P[S.dishPoint].name)}.</div></div>`;
-  if (F.tab === 'summon') body = `
-    <div class="field"><span class="label">Gọi robot tới</span><div class="seg" style="margin-bottom:6px">${Object.keys(P).filter(k => ['station', 'dish'].includes(P[k].kind))
-      .map(s => `<button data-f="to:${s}" ${press(F.to === s)}>${esc(P[s].name)}</button>`).join('')}</div>${tableGrid(t => F.to === t)}
-      <div class="hint">Robot tới nơi và chờ lệnh: nhân viên chọn bàn cần giao hoặc gửi chén đĩa về khu rửa ngay trên màn hình robot.</div></div>`;
-  const ok = F.tab === 'deliver' ? F.tables.length : F.tab === 'bus' ? F.table : F.to;
-  setHTML($('create'), `
-    <p class="eyebrow">Tạo nhiệm vụ · ${esc(by())}</p>
-    <div class="tabs" role="tablist">
-      <button data-f="tab:deliver" ${press(F.tab === 'deliver')}>🍽 Giao món</button>
-      <button data-f="tab:bus" ${press(F.tab === 'bus')}>🧺 Thu dọn bàn</button>
-      <button data-f="tab:summon" ${press(F.tab === 'summon')}>📣 Gọi robot</button>
-    </div>
-    ${body}
-    <div class="field"><span class="label">Robot</span><div class="seg">${robots.map(r => `<button data-f="robot:${r}" ${press(F.robot === r)}>${r === 'any' ? 'Bất kỳ (gần nhất)' : r}</button>`).join('')}</div></div>
-    ${F.tab === 'deliver' ? `<div class="field"><label for="note">Ghi chú (tuỳ chọn)</label><input type="text" id="note" maxlength="80" placeholder="VD: lẩu thái, cẩn thận nóng" value="${esc(F.note)}"></div>` : ''}
-    <div class="field"><label class="check"><input type="checkbox" id="urgent" ${F.urgent ? 'checked' : ''}> Ưu tiên gấp</label></div>
-    <button class="btn primary submit" data-act="create" ${ok ? '' : 'disabled'}>${F.tab === 'deliver' ? 'Gửi robot giao' : F.tab === 'bus' ? 'Gọi robot thu dọn' : 'Gọi robot tới'}</button>`);
+// What a table tile shows: robot standing there, robot on its way, queued, or free.
+function tableState(t) {
+  const r = App.state.robots.find(x => x.phase === 'atStop' && x.at === t);
+  if (r) return [r.id + ' đang ở bàn', 'here'];
+  for (const m of App.state.missions) for (const s of m.stops)
+    if (s.p === t && (s.status === 'pending' || s.status === 'active')) return [s.status === 'active' && m.robot ? m.robot + ' đang tới' : m.status !== 'active' ? 'Trong hàng chờ' : m.loaded ? 'Sắp tới lượt' : 'Đang chuẩn bị', 'busy'];
+  return ['Sẵn sàng', ''];
+}
+// Red button: undo the selection, or cancel/recall the chosen robot's job (else this station's newest job).
+function cancelTarget() {
+  const ms = App.state.missions.filter(m => !(m.kind === 'bus' && m.loaded));
+  if (F.robot !== 'any') return ms.find(m => m.robot === F.robot);
+  return ms.filter(m => m.by === by()).sort((a, b) => b.createdAt - a.createdAt)[0];
+}
+
+// Task row holds a text input, so it only re-renders on a choice, not on every state tick.
+function renderTask() {
+  const P = App.site.points, stations = Object.keys(P).filter(k => P[k].kind === 'station');
+  $('task').innerHTML = Object.entries(TASKS).map(([k, [t]]) => `<button class="chip" data-f="tab:${k}" ${press(F.tab === k)}>${t}</button>`).join('') +
+    (F.tab === 'deliver' ? `<span class="lbl" style="margin-left:8px">Lấy tại</span>${stations.map(s => `<button class="chip" data-f="from:${s}" ${press(F.from === s)}>${esc(P[s].name)}</button>`).join('')}` : '') +
+    `<span class="spacer"></span><span class="opts">${F.tab === 'deliver' ? `<input type="text" id="note" maxlength="80" placeholder="Ghi chú món (tuỳ chọn)" value="${esc(F.note)}">` : ''}
+    <label class="check"><input type="checkbox" id="urgent" ${F.urgent ? 'checked' : ''}> ⚡ Ưu tiên gấp</label></span>`;
+}
+function renderDesk() {
+  if (!App.state) return;
+  const S = App.site, P = S.points, R = App.state.robots;
+  let [bt, tone] = F.robot === 'any' ? [] : robotStatus(R.find(x => x.id === F.robot));
+  if (F.robot === 'any') { const free = R.filter(r => robotStatus(r)[1] === 'ok').length; [bt, tone] = [`Tự chọn robot gần nhất · ${free}/${R.length} sẵn sàng`, free ? 'ok' : 'warn']; }
+  else bt = F.robot + ' · ' + bt;
+  $('banner').className = 'banner ' + tone;
+  $('banner').textContent = 'Robot: ' + bt;
+  setHTML($('robots'), `<span class="lbl">Chọn robot</span><button class="chip" data-f="robot:any" ${press(F.robot === 'any')}>🤖 Bất kỳ · gần nhất</button>` +
+    R.map(r => { const [t, c] = robotStatus(r); return `<button class="chip" data-f="robot:${r.id}" ${press(F.robot === r.id)}><i class="${c}"></i>${r.id}<small>${esc(t)} · 🔋${Math.round(r.battery)}%</small></button>`; }).join(''));
+
+  const sel = selected();
+  const spots = F.tab === 'summon' ? Object.keys(P).filter(k => ['station', 'dish'].includes(P[k].kind)).map(k =>
+    `<button class="tt st" data-f="t:${k}" ${press(F.to === k)}><span class="k">Khu</span><span class="n">${esc(P[k].name)}</span><span class="s">Gọi robot tới đây</span></button>`) : [];
+  setHTML($('grid'), spots.concat(tableIds().map(t => {
+    const i = sel.indexOf(t), [st, cls] = tableState(t);
+    return `<button class="tt ${cls}" data-f="t:${t}" ${press(i >= 0)}>${i >= 0 ? `<span class="tag">✓${F.tab === 'deliver' ? ' K' + (i + 1) : ''}</span>` : ''}
+      <span class="k">Bàn</span><span class="n">${esc(short(t))}</span><span class="s">${i >= 0 && F.tab === 'deliver' ? 'Khay ' + (i + 1) : esc(st)}</span></button>`;
+  })).join(''));
+
+  const ms = sortMissions();
+  $('qhead').textContent = `Hàng chờ lệnh · ${ms.length}`;
+  setHTML($('queue'), ms.map((m, i) => {
+    const [t, c] = missionStatus(m), k = 'cm-' + m.id;
+    const x = m.kind === 'bus' && m.loaded ? '<span title="Đang chở chén bẩn — không huỷ">🔒</span>'
+      : `<button class="btn sm ${isArmed(k) ? 'armed' : 'warn'}" data-act="cancel" data-m="${m.id}" title="Huỷ lệnh">${isArmed(k) ? 'Huỷ?' : '✕'}</button>`;
+    return `<li><b>${i + 1}. ${esc(m.label)}${m.urgent ? ' ⚡' : ''}</b>${x}<span class="pill ${c}">${m.robot ? m.robot + ' · ' : ''}${esc(t)}</span></li>`;
+  }).join('') || '<li class="empty muted">Không có lệnh nào</li>');
+
+  const tgt = cancelTarget(), k = tgt && 'cm-' + tgt.id;
+  const red = sel.length ? `<button class="big red" data-act="unpick">✕ Bỏ chọn<small>${sel.length} mục đang chọn</small></button>`
+    : `<button class="big red ${tgt && isArmed(k) ? 'armed' : ''}" ${tgt ? `data-act="cancel" data-m="${tgt.id}"` : 'disabled'}>${tgt && isArmed(k) ? 'Chạm lần nữa để huỷ' : '✕ Huỷ lệnh / thu hồi robot'}
+      <small>${tgt ? esc(tgt.label) + (tgt.robot ? ' · ' + tgt.robot : '') : 'Không có lệnh để huỷ'}</small></button>`;
+  const hint = !sel.length ? (F.tab === 'summon' ? 'Chọn khu hoặc bàn' : 'Chọn bàn trên lưới')
+    : F.tab === 'deliver' ? `${pname(F.from)} → ${sel.map((t, i) => `K${i + 1}·${short(t)}`).join('  ')}`
+    : F.tab === 'bus' ? `Mang chén về ${pname(S.dishPoint)}` : 'Robot tới và chờ lệnh';
+  setHTML($('cmd'), `${red}<button class="big green" data-act="create" ${sel.length ? '' : 'disabled'}>✓ ${TASKS[F.tab][1]}<small>${esc(hint)}${F.urgent ? ' · ⚡ gấp' : ''}</small></button>`);
+
+  const K = App.state.kpi, base = K.delivered + K.timeout + K.failed;
+  setHTML($('foot'), `Số lượt giao trong ngày: ${K.delivered}<span>Hoàn thành ${base ? Math.round(K.delivered / base * 100) + '%' : '—'} · TB gọi → khách nhận ${K.delivered ? (K.deliverySecSum / K.delivered / 60).toFixed(1) + "'" : '—'} · Đi vòng tránh vật cản ${K.reroutes || 0}</span>`);
 }
 function choose(kind, val) {
   if (kind === 'tab') { F.tab = val; }
@@ -195,24 +292,34 @@ function choose(kind, val) {
     } else if (F.tab === 'bus') F.table = F.table === val ? null : val;
     else F.to = F.to === val ? null : val;
   }
-  renderForm(); renderMap();
+  renderTask(); renderDesk(); renderMap();
 }
-$('create').addEventListener('click', e => {
+$('desk').addEventListener('click', e => {
   const f = e.target.closest('[data-f]');
   if (f) { const [k, v] = f.dataset.f.split(':'); return choose(k, v); }
-  if (!e.target.closest('[data-act="create"]')) return;
+  const act = e.target.closest('[data-act]');
+  if (act && act.dataset.act === 'unpick') { Object.assign(F, { tables: [], table: null, to: null }); return choose(); }
+  if (!act || act.dataset.act !== 'create') return;
   const base = { type: 'create', robot: F.robot, urgent: F.urgent, by: by() };
   if (F.tab === 'deliver') send({ ...base, kind: 'deliver', from: F.from, tables: F.tables, note: F.note });
   if (F.tab === 'bus') send({ ...base, kind: 'bus', table: F.table });
   if (F.tab === 'summon') send({ ...base, kind: 'summon', to: F.to });
-  toast('Đã gửi nhiệm vụ');
+  toast('Đã gửi lệnh');
   Object.assign(F, { tables: [], table: null, to: null, urgent: false, note: '' });
-  renderForm(); renderMap();
+  choose();
 });
-$('create').addEventListener('input', e => {
+$('desk').addEventListener('input', e => {
   if (e.target.id === 'note') F.note = e.target.value;
-  if (e.target.id === 'urgent') F.urgent = e.target.checked;
+  if (e.target.id === 'urgent') { F.urgent = e.target.checked; renderDesk(); }
 });
+$('views').onclick = e => {
+  const b = e.target.closest('[data-view]');
+  if (!b) return;
+  for (const x of $('views').children) x.setAttribute('aria-pressed', x === b);
+  $('desk').hidden = b.dataset.view !== 'desk';
+  $('mon').hidden = b.dataset.view === 'desk';
+};
+setInterval(() => $('clock').textContent = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }), 1000);
 
 // ---- Map ----
 // Modes: pick tables for the form, or (demo) drop a chair / a passer-by on the floor to test obstacle handling.
@@ -287,8 +394,7 @@ function stopText(s) {
 }
 const ICON = { done: '✓ ', active: '▶ ', cancelled: '✕ ', manual: '⚠ ' };
 function missionHTML(m) {
-  const r = m.robot && App.state.robots.find(x => x.id === m.robot);
-  const [stText, tone] = m.status === 'queued' ? ['Chờ ' + (m.robotPref === 'any' ? 'robot rảnh' : m.robotPref), 'warn'] : robotStatus(r);
+  const [stText, tone] = missionStatus(m);
   const stops = m.stops.map((s, i) => {
     const k = `cs-${m.id}-${i}`;
     const x = s.a === 'handoff' && open(s) ? `<button data-act="cancelStop" data-m="${m.id}" data-s="${i}" class="${isArmed(k) ? 'armed' : ''}" title="Huỷ bàn này">${isArmed(k) ? 'Huỷ?' : '×'}</button>` : '';
@@ -345,10 +451,9 @@ function renderOps() {
 
 function render() {
   if (!App.state) return;
-  const ms = App.state.missions.slice().sort((a, b) => (a.status === 'active' ? 0 : 1) - (b.status === 'active' ? 0 : 1) || (b.urgent - a.urgent) || a.createdAt - b.createdAt);
-  setHTML($('missions'), ms.map(missionHTML).join('') || '<p class="empty">Không có nhiệm vụ nào</p>');
+  setHTML($('missions'), sortMissions().map(missionHTML).join('') || '<p class="empty">Không có nhiệm vụ nào</p>');
   setHTML($('fleet'), App.state.robots.map(robotHTML).join(''));
-  renderOps(); renderMap();
+  renderOps(); renderMap(); renderDesk();
 }
 
 document.body.addEventListener('click', e => {
