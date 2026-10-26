@@ -41,15 +41,17 @@
       <li><b>Màn robot:</b> khi robot tới bếp, bấm “Đã xếp xong · Đi giao”.</li>
       <li><b>Khách Bàn 05:</b> robot tới bàn, đọc thông báo tiếng Việt → bấm “Đã nhận món”.</li>
       <li><b>Khách Bàn 07</b> (trang QR): bấm “Huỷ món này” → robot tự mang khay 2 về bếp.</li>
-      <li><b>Sự cố:</b> ở cuối trang trạm, mô phỏng “Vật cản” hoặc bấm nút DỪNG trên robot → mọi trạm nhận cảnh báo.</li>
+      <li><b>Vật cản:</b> trên sơ đồ trạm chọn “🪑 Đặt vật cản” rồi chạm lên lối đi ngay trước robot → robot dừng, xin nhường đường, chờ rồi tự đi vòng. Chặn cả đường vòng → mọi trạm nhận cảnh báo.</li>
+      <li><b>Thiết kế lộ trình:</b> mở “✏️ Thiết kế lộ trình”, đóng một lối đi hoặc đặt lối một chiều → “Áp dụng” → robot đang chạy tự tính lại đường.</li>
     </ol>
   </div>
   <div class="card"><p class="eyebrow">Máy trạm (nhân viên)</p><div class="grid" id="stations"></div>
     <p class="note">Mỗi trạm chỉ nghe thông báo ở khu vực của mình; cảnh báo sự cố thì mọi trạm đều nhận.</p></div>
+  <div class="card"><p class="eyebrow">Lộ trình robot</p><div class="grid"><a class="tile" href="map.html" target="_blank"><b>✏️ Thiết kế lộ trình</b><span>Lối đi, lối hẹp, một chiều, vùng đi chậm, đóng lối</span></a></div></div>
   <div class="card"><p class="eyebrow">Màn hình trên robot</p><div class="grid" id="robots"></div></div>
   <div class="card"><p class="eyebrow">Khách hàng · QR tại bàn</p><div class="tgrid" id="tables"></div></div>
   <div class="card"><p class="eyebrow">Về bản demo này</p>
-    <p class="note">Bộ điều phối và robot giả lập chạy ngay trong trình duyệt của bạn — cùng mã nguồn với bản chạy trên Node-RED tại nhà hàng. Không gửi dữ liệu đi đâu. Các tab/cửa sổ trong <b>cùng trình duyệt</b> đồng bộ với nhau; thiết bị khác sẽ có nhà hàng mô phỏng riêng. Robot di chuyển theo đường thẳng, không phải dẫn đường thật.</p>
+    <p class="note">Bộ điều phối và robot giả lập chạy ngay trong trình duyệt của bạn — cùng mã nguồn với bản chạy trên Node-RED tại nhà hàng. Không gửi dữ liệu đi đâu. Các tab/cửa sổ trong <b>cùng trình duyệt</b> đồng bộ với nhau; thiết bị khác sẽ có nhà hàng mô phỏng riêng. Robot giả lập đi theo mạng lối đi bạn thiết kế, tự chờ và đi vòng khi gặp vật cản; robot thật dùng bản đồ và cảm biến của hãng.</p>
     <div class="row"><button class="btn sm" id="reset">↺ Xoá dữ liệu demo</button></div></div>
 </main>
 <script src="transport.js"></script><script src="common.js"></script>

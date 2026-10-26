@@ -75,7 +75,16 @@ function view(r, m) {
   }
   if (r.halt === 'blocked') {
     document.body.className = 'screen-warn';
-    return `<p class="kicker">Robot đang chờ</p><p class="huge">Xin nhường đường</p><p class="sub">Có vật cản phía trước robot.</p>
+    if (r.why === 'noroute') return `<p class="kicker">Không có lộ trình</p><p class="huge">Lối đi đã bị đóng</p>
+      <p class="sub">Không có đường tới ${esc(pname(r.target))}. Quản lý mở lại lối đi trong “Thiết kế lộ trình”, hoặc chuyển xử lý thủ công.</p>`;
+    return `<p class="kicker">Cần nhân viên hỗ trợ</p><p class="huge">Xin nhường đường</p>
+      <p class="sub">Lối đi phía trước bị chặn và không còn đường vòng. Vui lòng dọn lối đi.</p>
+      <div class="actions">${btn('clear', 'Nhân viên: đã dọn lối đi', 'secondary')}</div>`;
+  }
+  if (r.nav === 'wait' && r.why !== 'robot' && !r.halt) {
+    document.body.className = 'screen-warn';
+    return `<p class="kicker">Robot đang chờ</p><p class="huge">Xin nhường đường</p>
+      <p class="sub">${r.why === 'person' ? 'Có người phía trước — robot chờ quý khách đi qua.' : `Có vật cản phía trước — robot chờ ${App.site.sim.waitSec} giây rồi tìm đường vòng.`}</p>
       <div class="actions">${btn('clear', 'Nhân viên: đã dọn lối đi', 'secondary')}</div>`;
   }
   if (r.halt === 'paused') return `<p class="kicker">Tạm dừng</p><p class="huge">Robot tạm dừng</p><p class="sub">Một trạm đã tạm dừng robot này.</p>
@@ -117,8 +126,9 @@ function view(r, m) {
   if (r.phase === 'toStop' && m) {
     const s = m.stops[m.cur];
     const what = { load: 'Tới lấy đồ', handoff: 'Đang giao món', collect: 'Tới thu dọn', unload: 'Mang chén đĩa', return: 'Mang đồ bị huỷ về', standby: 'Đang tới' }[s.a];
+    const nav = { yield: `Đang nhường lối hẹp${r.why ? ' cho ' + r.why : ''}`, queue: 'Đang chờ tới lượt', wait: 'Chờ robot phía trước' }[r.nav];
     return `<p class="kicker">${esc(m.label)}</p><p class="big">${what}</p><p class="huge">${esc(pname(s.p))}</p>
-      <p class="sub" id="timer"></p>${m.kind === 'deliver' && m.loaded ? trayList(m, x => x.a === 'handoff') : ''}`;
+      ${nav ? `<p class="sub">⏳ ${nav}</p>` : ''}<p class="sub" id="timer"></p>${m.kind === 'deliver' && m.loaded ? trayList(m, x => x.a === 'handoff') : ''}`;
   }
   if (r.phase === 'toDock') return `<p class="kicker">Hoàn tất</p><p class="huge">Về trạm sạc</p><p class="sub">Robot sẵn sàng nhận nhiệm vụ mới trên đường về.</p>`;
   return `<p class="kicker">${esc(pname(r.at || r.dock))}</p><p class="huge">${r.charging ? 'Đang sạc' : 'Sẵn sàng'}</p>

@@ -3,8 +3,11 @@
 // Pure logic: handle(st, site, input, now) -> { ui: [{payload, session?}], cmds: [adapter cmd] }.
 // It only talks to robots through the adapter contract, so the simulator can be swapped for a
 // vendor gateway without touching this file:
-//   cmds   -> {cmd:'goto', robot, x, y, token} | {cmd:'stop'|'resume', robot} | {cmd:'sim', robot, fault} | {cmd:'reset'}
-//   events <- {event:'telemetry', robots:[{id, x, y, battery, moving, blocked}]} | {event:'arrived', robot, token}
+//   cmds   -> {cmd:'goto', robot, to, x, y, token} | {cmd:'stop'|'resume', robot} | {cmd:'map', map, v}
+//             | {cmd:'obstacle', x, y, kind | remove} | {cmd:'sim', robot, fault} | {cmd:'reset'}
+//   events <- {event:'telemetry', mapV, obstacles, robots:[{id, x, y, battery, moving, blocked, nav, why, path, rem}]}
+//             | {event:'arrived', robot, token} | {event:'reroute', robot, why}
+// The route network (st.map) lives here, like a fleet manager's map; robots get it via {cmd:'map'}.
 // NOTE: this is not a safety system. Physical E-stop / collision safety must live on the robot.
 
 const OFFLINE_SEC = 3;
@@ -13,28 +16,31 @@ const ACTION_VI = { load: 'Xếp đồ lên khay', handoff: 'Giao cho khách', c
 const STATUS_VI = { done: 'hoàn thành', cancelled: 'đã huỷ', failed: 'chuyển xử lý thủ công' };
 const ARRIVE_SOUND = { load: 'load', handoff: 'arrived', collect: 'collect', unload: 'unload', return: 'unload', standby: 'standby' };
 const SIM_FAULTS = ['block', 'clear', 'offline', 'online', 'lowbat'];
+const R = require('./route');
+const WHY_VI = { object: 'vật cản', person: 'người đi qua', robot: 'robot khác' };
 
 let lastSnap = '';
 
 function init(site, now) {
   const st = { seq: 0, alertSeq: 0, robots: {}, missions: [], history: [], log: [], alerts: [],
-    kpi: { delivered: 0, cancelledCustomer: 0, cancelledStaff: 0, timeout: 0, failed: 0, interventions: 0, deliverySecSum: 0 } };
+    kpi: { delivered: 0, cancelledCustomer: 0, cancelledStaff: 0, timeout: 0, failed: 0, interventions: 0, deliverySecSum: 0, reroutes: 0 } };
   sync(st, site, now);
   return st;
 }
 
 // Adds robots that appear in site.json after state was persisted.
 function sync(st, site, now) {
+  if (!st.map) { st.map = { v: 1, ...JSON.parse(JSON.stringify(site.map)) }; st.obstacles = []; }
   for (const { id, dock } of site.robots) {
     if (st.robots[id]) continue;
     const p = site.points[dock];
     st.robots[id] = { id, dock, x: p.x, y: p.y, battery: 100, phase: 'idle', at: dock, target: null, token: 0,
-      mission: null, halt: null, offline: false, charging: false, lastSeen: now, waitSince: 0, lastRemind: 0, waitAlerted: false };
+      mission: null, halt: null, offline: false, charging: false, lastSeen: now, waitSince: 0, lastRemind: 0, waitAlerted: false,
+      nav: 'idle', why: null, path: [], rem: 0 };
   }
 }
 
 const open = s => s.status === 'pending' || s.status === 'active';
-const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const pname = (c, id) => (c.site.points[id] || {}).name || id;
 const findM = (c, id) => c.st.missions.find(m => m.id === id);
 
@@ -59,9 +65,12 @@ const resolve = (c, key) => { c.st.alerts = c.st.alerts.filter(a => a.key !== ke
 const ev = (c, e) => c.ui.push({ payload: JSON.stringify({ type: 'event', t: c.now, ...e }) });
 
 function goTo(c, r, point, phase) {
-  const p = c.site.points[point];
   r.target = point; r.at = null; r.phase = phase; r.token++; r.waitAlerted = false;
-  c.cmds.push({ cmd: 'goto', robot: r.id, x: p.x, y: p.y, token: r.token });
+  gotoCmd(c, r);
+}
+function gotoCmd(c, r) {
+  const p = c.st.map.nodes[r.target];
+  c.cmds.push({ cmd: 'goto', robot: r.id, to: r.target, x: p.x, y: p.y, token: r.token });
 }
 
 // Moves a mission to its next open stop, or finishes it.
@@ -97,11 +106,12 @@ function finish(c, m, status) {
 function assign(c) {
   const queue = c.st.missions.filter(m => m.status === 'queued').sort((a, b) => (b.urgent - a.urgent) || (a.createdAt - b.createdAt));
   for (const m of queue) {
-    const first = c.site.points[m.stops.find(open).p];
+    const first = m.stops.find(open).p;
     const free = Object.values(c.st.robots).filter(r => !r.mission && !r.halt && !r.offline && !r.charging &&
       (m.robotPref === 'any' || m.robotPref === r.id));
     if (!free.length) continue;
-    const r = free.reduce((a, b) => (dist(a, first) <= dist(b, first) ? a : b));   // nearest
+    const far = r => R.distance(c.st.map, r.x, r.y, first);   // along the aisles, not as the crow flies
+    const r = free.reduce((a, b) => (far(a) <= far(b) ? a : b));
     m.status = 'active'; m.robot = r.id; m.startedAt = c.now; r.mission = m.id;
     log(c, 'info', `${r.id} nhận ${m.label}`, r.id);
     advance(c, m);
@@ -208,16 +218,26 @@ function dispatch(c, r, d, by) {
   advance(c, m);
 }
 
-function telemetry(c, list) {
+function telemetry(c, d) {
   const { st, site, now } = c;
+  const list = Array.isArray(d.robots) ? d.robots : [];
+  if (Array.isArray(d.obstacles)) st.obstacles = d.obstacles;
+  if (d.mapV !== undefined && d.mapV !== st.map.v) {   // robot runs an old map (restart / edit): resend map and goals
+    c.cmds.push({ cmd: 'map', map: { nodes: st.map.nodes, edges: st.map.edges }, v: st.map.v });
+    for (const r of Object.values(st.robots)) if (r.target) gotoCmd(c, r);
+  }
   for (const t of list) {
     const r = st.robots[t.id];
     if (!r) continue;
     r.x = t.x; r.y = t.y; r.battery = t.battery; r.lastSeen = now;
+    r.path = Array.isArray(t.path) ? t.path : []; r.rem = t.rem || 0;
+    if (t.nav !== r.nav) navChanged(c, r, t);
+    r.nav = t.nav || 'idle'; r.why = t.why || null;
     if (r.offline) { r.offline = false; resolve(c, 'off-' + r.id); log(c, 'ok', `${r.id} đã kết nối lại`, r.id); }
     if (t.blocked && !r.halt) {
       r.halt = 'blocked'; st.kpi.interventions++;
-      alert(c, 'blk-' + r.id, 'error', `${r.id} bị chặn đường — cần nhân viên dọn lối đi`, r.id);
+      alert(c, 'blk-' + r.id, 'error', t.why === 'noroute' ? `${r.id} không có lộ trình tới ${pname(c, r.target)} — mở lại lối đi hoặc xử lý thủ công`
+        : `${r.id} bị chặn (${WHY_VI[t.why] || 'vật cản'}), không còn đường vòng — cần nhân viên dọn lối đi`, r.id);
       ev(c, { robot: r.id, robotSound: 'blocked', stationSound: 'alert', text: `${r.id} bị chặn đường` });
     }
     if (!t.blocked && r.halt === 'blocked') {
@@ -236,6 +256,22 @@ function telemetry(c, list) {
       ev(c, { stationSound: 'alert', text: `${r.id} mất kết nối` });
     }
   }
+}
+
+// Navigation cues: ask people to make way, tell stations when a robot gives way in a narrow lane.
+function navChanged(c, r, t) {
+  if (t.nav === 'wait') {
+    log(c, 'info', `${r.id} gặp ${WHY_VI[t.why] || 'vật cản'} trên lối đi — dừng chờ`, r.id);
+    if (t.why !== 'robot') ev(c, { robot: r.id, robotSound: 'excuse', text: `${r.id}: xin nhường đường` });
+  }
+  if (t.nav === 'yield') log(c, 'info', `${r.id} chờ ${t.why || 'robot khác'} đi qua lối hẹp`, r.id);
+  if (t.nav === 'queue') log(c, 'info', `${r.id} xếp hàng chờ tới lượt tại ${pname(c, r.target)}`, r.id);
+}
+function reroute(c, r, why) {
+  if (why === 'reopened') return log(c, 'ok', `${r.id} đã có lộ trình mới, chạy tiếp`, r.id);
+  c.st.kpi.reroutes++;
+  log(c, 'warn', `${r.id} đổi lộ trình, đi vòng tránh ${WHY_VI[why] || 'vật cản'}`, r.id);
+  ev(c, { robot: r.id, text: `${r.id} đi đường vòng` });
 }
 
 // Waiting-time rules while a robot stands at a stop.
@@ -276,6 +312,7 @@ function fromUI(c, d, session) {
   switch (d.type) {
     case 'hello':
       c.ui.push({ session, payload: JSON.stringify({ type: 'site', site: c.site }) });
+      c.ui.push({ session, payload: JSON.stringify({ type: 'map', map: st.map }) });
       c.force = true;
       return;
     case 'create': return create(c, d, by);
@@ -307,8 +344,28 @@ function fromUI(c, d, session) {
       c.cmds.push({ cmd: 'resume', robot: r.id });
       log(c, 'ok', `${by} cho ${r.id} chạy tiếp`, r.id);
       return;
-    case 'clear':   // staff removed the obstacle (sim: lifts the injected block)
-      if (r && r.halt === 'blocked') { c.cmds.push({ cmd: 'sim', robot: r.id, fault: 'clear' }); log(c, 'info', `${by} đã dọn lối cho ${r.id}`, r.id); }
+    case 'clear':   // staff removed the obstacle (sim: removes obstacles around the robot)
+      if (r && (r.halt === 'blocked' || ['wait', 'stuck'].includes(r.nav))) { c.cmds.push({ cmd: 'sim', robot: r.id, fault: 'clear' }); log(c, 'info', `${by} đã dọn lối cho ${r.id}`, r.id); }
+      return;
+    case 'map': {   // operator saved a new route network
+      const map = R.clean(d.map, c.site);
+      if (!map) return;
+      st.map = { v: st.map.v + 1, ...map };
+      c.cmds.push({ cmd: 'map', map, v: st.map.v });
+      const bad = R.unreachable(st.map, c.site);
+      log(c, bad.length ? 'warn' : 'info', `${by} cập nhật lộ trình (bản ${st.map.v})${bad.length ? ' — không tới được: ' + bad.map(p => pname(c, p)).join(', ') : ''}`);
+      c.ui.push({ payload: JSON.stringify({ type: 'map', map: st.map }) });
+      return;
+    }
+    case 'mapReset':
+      st.map = { v: st.map.v + 1, ...JSON.parse(JSON.stringify(c.site.map)) };
+      c.cmds.push({ cmd: 'map', map: { nodes: st.map.nodes, edges: st.map.edges }, v: st.map.v });
+      log(c, 'info', `${by} khôi phục lộ trình mặc định (bản ${st.map.v})`);
+      c.ui.push({ payload: JSON.stringify({ type: 'map', map: st.map }) });
+      return;
+    case 'obstacle':   // demo: drop / remove a chair or a passer-by on the floor plan
+      if (d.remove === 'all' || typeof d.remove === 'number') c.cmds.push({ cmd: 'obstacle', remove: d.remove });
+      else if (isFinite(d.x) && isFinite(d.y)) c.cmds.push({ cmd: 'obstacle', x: +d.x, y: +d.y, kind: d.kind === 'person' ? 'person' : 'object' });
       return;
     case 'manual': {   // manual fallback: staff finishes the job by hand
       const mm = r && findM(c, r.mission);
@@ -324,6 +381,7 @@ function fromUI(c, d, session) {
       for (const k of Object.keys(st)) delete st[k];
       Object.assign(st, init(c.site, c.now));
       c.cmds.push({ cmd: 'reset' });
+      c.ui.push({ payload: JSON.stringify({ type: 'map', map: st.map }) });
       log(c, 'info', `${by} khởi động lại demo`);
       return;
   }
@@ -331,9 +389,10 @@ function fromUI(c, d, session) {
 
 function snapshot(st) {
   return {
-    robots: Object.values(st.robots).map(({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince }) =>
-      ({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince })),
-    missions: st.missions, history: st.history.slice(0, 15), log: st.log.slice(0, 40), alerts: st.alerts, kpi: st.kpi
+    robots: Object.values(st.robots).map(({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince, nav, why, path, rem }) =>
+      ({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince, nav, why, path, rem })),
+    missions: st.missions, history: st.history.slice(0, 15), log: st.log.slice(0, 40), alerts: st.alerts, kpi: st.kpi,
+    obstacles: st.obstacles, mapV: st.map.v
   };
 }
 
@@ -344,8 +403,9 @@ function handle(st, site, input, now) {
   const d = input.data;
   if (d && typeof d === 'object') {
     if (input.source === 'adapter') {
-      if (d.event === 'telemetry') { telemetry(c, Array.isArray(d.robots) ? d.robots : []); timers(c); }
+      if (d.event === 'telemetry') { telemetry(c, d); timers(c); }
       else if (d.event === 'arrived' && st.robots[d.robot]) arrived(c, st.robots[d.robot], d.token);
+      else if (d.event === 'reroute' && st.robots[d.robot]) reroute(c, st.robots[d.robot], d.why);
     } else fromUI(c, d, input.session);
   }
   assign(c);

@@ -1,5 +1,5 @@
 // Shared by station / robot / table pages: messaging (via transport.js), MP3 cues, labels, small UI helpers.
-const App = { site: null, state: null, skew: 0 };
+const App = { site: null, state: null, map: null, skew: 0 };
 
 function connect(onMsg) {
   const off = document.getElementById('offline'), dot = document.getElementById('conn');
@@ -7,6 +7,7 @@ function connect(onMsg) {
     let m;
     try { m = JSON.parse(raw); } catch (err) { return; }
     if (m.type === 'site') App.site = m.site;
+    if (m.type === 'map') App.map = m.map;
     if (m.type === 'state') { App.state = m; App.skew = Date.now() - m.now; }
     if (App.site) onMsg(m);
   }, up => {
@@ -18,7 +19,7 @@ function connect(onMsg) {
 function send(obj) { Transport.send(JSON.stringify(obj)); }
 
 // Browsers block autoplay until a user tap, so audio is unlocked from a click handler.
-const SOUNDS = ['arrived', 'remind', 'thanks', 'load', 'collect', 'unload', 'cancel', 'estop', 'blocked', 'standby', 'alert', 'cancelled', 'ding'];
+const SOUNDS = ['excuse', 'arrived', 'remind', 'thanks', 'load', 'collect', 'unload', 'cancel', 'estop', 'blocked', 'standby', 'alert', 'cancelled', 'ding'];
 const audio = {};
 let soundOn = false;
 function enableSound() {
@@ -41,10 +42,7 @@ const clock = t => new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', mi
 const ACTION_VI = { load: 'Xếp đồ lên khay', handoff: 'Giao cho khách', collect: 'Thu chén đĩa', unload: 'Dỡ chén đĩa', return: 'Trả đồ bị huỷ', standby: 'Chờ lệnh' };
 
 function missionOf(r) { return r && r.mission ? App.state.missions.find(m => m.id === r.mission) : null; }
-function etaSec(r) {
-  const p = App.site.points[r.target];
-  return p ? Math.round(Math.hypot(p.x - r.x, p.y - r.y) / App.site.sim.speed) : 0;
-}
+const etaSec = r => Math.round((r.rem || 0) / App.site.sim.speed);   // remaining route length, not straight line
 // [text, tone] for a robot's current status.
 function robotStatus(r) {
   if (r.offline) return ['Mất kết nối', 'danger'];
@@ -52,6 +50,9 @@ function robotStatus(r) {
   if (r.halt === 'blocked') return ['Bị chặn đường', 'danger'];
   if (r.halt === 'paused') return ['Tạm dừng', 'warn'];
   const m = missionOf(r);
+  if (r.nav === 'wait') return [r.why === 'person' ? 'Chờ người đi qua' : r.why === 'robot' ? 'Chờ robot phía trước' : 'Gặp vật cản · đang chờ', 'warn'];
+  if (r.nav === 'yield') return ['Nhường lối ' + (r.why ? 'cho ' + r.why : 'hẹp'), 'warn'];
+  if (r.nav === 'queue') return ['Chờ tới lượt · ' + pname(r.target), 'warn'];
   if (r.phase === 'toStop') return ['Đang tới ' + pname(r.target), 'go'];
   if (r.phase === 'atStop' && m) return [ACTION_VI[m.stops[m.cur].a] + ' · ' + pname(r.at), 'warn'];
   if (r.phase === 'toDock') return ['Về trạm sạc', 'go'];
@@ -83,3 +84,45 @@ function toast(text, level = 'info') {
 
 const BRAND = sub => `<a class="identity" href="index.html"><img src="logo.svg" alt="">
   <div><div class="wordmark">MEKONI<span>Q</span></div><small>${esc(sub)}</small></div></a>`;
+
+// ---- Floor plan + route network (station map, map editor) ----
+// Tables/zones are drawn where they are; the route network shows where robots may drive.
+function floorSVG(click) {
+  const S = App.site, P = S.points;
+  let h = `<rect x="0" y="0" width="${S.floor.w}" height="${S.floor.h}" rx=".4" fill="none" stroke="var(--line)" stroke-width=".1"/>`;
+  for (const [id, p] of Object.entries(P)) {
+    const f = a => (click ? ` data-f="${a}"` : '');
+    if (p.kind === 'table') h += `<g${f('t:' + id)}><rect class="tbl" id="pt-${id}" x="${p.x - .9}" y="${p.y - .65}" width="1.8" height="1.3" rx=".25"/><text x="${p.x}" y="${p.y}">${short(id)}</text></g>`;
+    else if (p.kind === 'dock') h += `<rect class="zone dock" x="${p.x - .6}" y="${p.y - .5}" width="1.2" height="1" rx=".2"/><text class="zl" x="${p.x}" y="${p.y - .1}">⚡${esc(p.name.replace(/\D/g, ''))}</text>`;
+    else h += `<g${f((p.kind === 'station' ? 'from:' : 'to:') + id)}><rect class="zone ${p.kind}" x="${p.x - 2.4}" y="${p.y - 1.6}" width="4.8" height="3.2" rx=".4"/><text x="${p.x - .4}" y="${p.y}">${esc(p.name)}</text></g>`;
+  }
+  return h;
+}
+function netSVG(map, o = {}) {
+  const N = map.nodes, P = App.site.points;
+  let h = '', hits = '';
+  map.edges.forEach((e, i) => {
+    const a = N[e.a], b = N[e.b];
+    if (!a || !b) return;
+    const cls = ['lane', e.narrow && 'narrow', e.slow && 'slow', e.closed && 'closed', o.edge === i && 'sel'].filter(Boolean).join(' ');
+    h += `<line class="${cls}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
+    if (e.oneway && !e.closed) h += `<path class="arrow" d="M-.2,-.17 L.2,0 L-.2,.17 Z" transform="translate(${(a.x + b.x) / 2} ${(a.y + b.y) / 2}) rotate(${Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI})"/>`;
+    if (o.edit) hits += `<line class="hit" data-edge="${i}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
+  });
+  h += hits;
+  for (const [id, n] of Object.entries(N))
+    h += `<circle class="node${P[id] ? ' stop' : ''}${o.node === id ? ' sel' : ''}${o.from === id ? ' from' : ''}" ${o.edit ? `data-node="${id}"` : ''} cx="${n.x}" cy="${n.y}" r="${o.edit ? (P[id] ? .24 : .2) : P[id] ? .12 : .07}"/>`;
+  return h;
+}
+const obstacleSVG = obs => obs.map(o => `<g class="ob ${o.kind}" data-ob="${o.id}" transform="translate(${o.x} ${o.y})"><circle r=".32"/><text>${o.kind === 'person' ? '🚶' : '🪑'}</text></g>`).join('');
+const LEGEND = `<div class="legend">${[['', 'Lối đi'], ['narrow', 'Lối hẹp · 1 robot'], ['slow', 'Đi chậm'], ['closed', 'Đã đóng']]
+  .map(([c, t]) => `<span><svg viewBox="0 0 2 .4"><line class="lane ${c}" x1=".1" y1=".2" x2="1.9" y2=".2"/></svg>${t}</span>`).join('')}
+  <span><svg viewBox="0 0 2 .4"><line class="lane" x1=".1" y1=".2" x2="1.9" y2=".2"/><path class="arrow" d="M-.2,-.17 L.2,0 L-.2,.17 Z" transform="translate(1 .2)"/></svg>Một chiều</span>
+  <span><svg viewBox="0 0 2 .4"><line class="path" x1=".1" y1=".2" x2="1.9" y2=".2"/></svg>Lộ trình robot</span></div>`;
+// Screen click -> floor coordinates (metres).
+function svgPoint(svg, e) {
+  const p = svg.createSVGPoint();
+  p.x = e.clientX; p.y = e.clientY;
+  const q = p.matrixTransform(svg.getScreenCTM().inverse());
+  return { x: Math.round(q.x * 10) / 10, y: Math.round(q.y * 10) / 10 };
+}

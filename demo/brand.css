@@ -79,3 +79,32 @@ input[type=text] { width: 100%; border: 1px solid var(--line); background: var(-
 .toast.warn { border-color: var(--accent); }
 .toast.error { border-color: var(--danger); }
 @keyframes in { from { transform: translateY(10px); opacity: 0; } }
+
+/* Floor plan + route network (station map, map editor) */
+.floor { width: 100%; height: auto; display: block; border-radius: 14px; background: var(--soft); touch-action: manipulation; }
+.floor .zone { fill: var(--card); stroke: var(--line); stroke-width: .06; }
+.floor .zone.station { fill: color-mix(in srgb, var(--mint) 30%, var(--card)); }
+.floor .zone.dish { fill: color-mix(in srgb, var(--iq) 25%, var(--card)); }
+.floor .zone.dock { fill: color-mix(in srgb, var(--accent) 25%, var(--card)); }
+.floor .tbl { fill: var(--card); stroke: var(--gray); stroke-width: .06; }
+.floor text { font-size: .55px; font-weight: 800; fill: var(--fg); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.floor .zl { font-size: .45px; fill: var(--muted); }
+.lane { stroke: color-mix(in srgb, var(--iq) 70%, transparent); stroke-width: .1; stroke-linecap: round; fill: none; }
+.lane.narrow { stroke: var(--accent); stroke-dasharray: .28 .16; stroke-linecap: butt; }
+.lane.slow { stroke: var(--warn); stroke-width: .22; opacity: .6; }
+.lane.closed { stroke: var(--danger); stroke-dasharray: .12 .14; stroke-linecap: butt; opacity: .8; }
+.lane.sel { stroke: var(--deep); stroke-width: .24; opacity: 1; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lane.sel { stroke: var(--mint); } }
+:root[data-theme="dark"] .lane.sel { stroke: var(--mint); }
+.arrow { fill: var(--green); }
+.node { fill: var(--card); stroke: var(--gray); stroke-width: .04; }
+.node.stop { fill: var(--green); stroke: none; }
+.node.sel, .node.from { fill: var(--accent); stroke: var(--deep); stroke-width: .06; }
+.hit { stroke: transparent; stroke-width: .55; cursor: pointer; }
+.path { stroke: var(--green); stroke-width: .08; stroke-dasharray: .25 .18; fill: none; stroke-linecap: round; }
+.ob circle { fill: color-mix(in srgb, var(--danger) 22%, var(--card)); stroke: var(--danger); stroke-width: .06; }
+.ob.person circle { fill: color-mix(in srgb, var(--accent) 30%, var(--card)); stroke: var(--accent); }
+.ob text { font-size: .38px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend svg { width: 34px; height: 8px; }

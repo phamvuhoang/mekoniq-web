@@ -5,20 +5,22 @@
 // ponytail: browsers throttle timers in background tabs, so robots slow down if the engine tab is
 // hidden for long; the real deployment runs the engine on Node-RED, not in a page.
 const Transport = (() => {
-  const KEY = 'mekoniq.demo.v1';
+  const KEY = 'mekoniq.demo.v2';
   const ch = new BroadcastChannel('mekoniq-demo');
   const me = Math.random().toString(36).slice(2);
   let onData = () => {}, onStatus = () => {}, input = null;
 
-  // Loads a CommonJS file from lib/ (shared verbatim with Node-RED).
-  async function load(url) {
+  // Loads a CommonJS file from lib/ (shared verbatim with Node-RED); deps maps require() names.
+  async function load(url, deps = {}) {
     const module = { exports: {} };
-    new Function('module', 'exports', await (await fetch(url)).text())(module, module.exports);
+    new Function('module', 'exports', 'require', await (await fetch(url)).text())(module, module.exports, n => deps[n]);
     return module.exports;
   }
 
   async function lead() {
-    const [O, S, site] = await Promise.all([load('lib/orchestrator.js'), load('lib/simulator.js'), fetch('site.json').then(r => r.json())]);
+    const route = await load('lib/route.js');
+    const [O, S, site] = await Promise.all([load('lib/orchestrator.js', { './route': route }), load('lib/simulator.js', { './route': route }),
+      fetch('site.json').then(r => r.json())]);
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
     const st = (saved && saved.st) || O.init(site, Date.now());

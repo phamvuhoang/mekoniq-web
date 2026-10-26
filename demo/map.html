@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="vi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MEKONIQ Serve · Thiết kế lộ trình</title>
+<link rel="icon" href="logo.svg"><link rel="stylesheet" href="brand.css">
+<style>
+  .layout { max-width: 1400px; margin: auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) 360px; align-items: start; }
+  @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+  .stack { display: grid; gap: 16px; min-width: 0; }
+  #ed { touch-action: none; user-select: none; -webkit-user-select: none; }
+  #ed.add, #ed.connect { cursor: crosshair; }
+  #ed .node { cursor: grab; }
+  #ed .rbm circle { fill: var(--mint); stroke: var(--deep); stroke-width: .06; opacity: .85; }
+  #ed .rbm text { font-size: .3px; fill: var(--deep); }
+  #ed .rbm { pointer-events: none; }
+  .tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--soft); padding: 4px; border-radius: 14px; }
+  .tools button { border: 0; background: transparent; border-radius: 10px; padding: 9px 4px; font-weight: 800; font-size: 13px; }
+  .tools button[aria-pressed="true"] { background: var(--card); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+  .props { display: grid; gap: 10px; }
+  .props .check { display: flex; gap: 8px; align-items: flex-start; }
+  .props .check small { display: block; color: var(--muted); font-size: 12px; }
+  .warns { display: grid; gap: 6px; font-size: 13px; }
+  .warns .bad { color: var(--danger); font-weight: 700; }
+  .warns .good { color: var(--green); font-weight: 700; }
+  .rules { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .dirty { color: var(--warn); font-weight: 800; font-size: 13px; }
+</style>
+</head><body>
+<header class="top"><div class="nav">
+  <div id="brand"></div>
+  <div class="navright">
+    <span class="pill" id="ver">Bản …</span>
+    <button class="btn sm" id="revert">Huỷ thay đổi</button>
+    <button class="btn sm" id="defaults">Khôi phục mặc định</button>
+    <button class="btn sm primary" id="apply" disabled>Áp dụng cho đội robot</button>
+    <span class="dot" id="conn" title="Kết nối hệ thống"></span>
+  </div>
+</div></header>
+
+<main class="layout">
+  <section class="stack">
+    <div class="card"><p class="eyebrow">Sơ đồ lộ trình · kéo điểm để chỉnh, chạm lối đi để sửa</p>
+      <svg id="ed" class="floor" role="img" aria-label="Trình thiết kế lộ trình robot"></svg>
+      <div id="legend"></div></div>
+    <div class="card"><p class="eyebrow">Nguyên tắc thiết kế lộ trình</p>
+      <ul class="rules">
+        <li><b>Lối chính đủ rộng cho robot và người cùng đi</b> (thường từ 0,9–1,2 m). Chỗ hẹp hơn thì đánh dấu <b>lối hẹp</b>: mỗi lần chỉ một robot vào, robot khác chờ ở đầu lối.</li>
+        <li><b>Điểm dừng giao món đặt cạnh bàn, lệch khỏi lối chính</b>, để robot đứng giao không chắn đường robot khác.</li>
+        <li><b>Luôn có đường vòng</b>: thiết kế lối đi thành vòng khép kín, tránh ngõ cụt dài. Khi một lối bị chặn, robot chờ rồi tự đi đường khác.</li>
+        <li><b>Một chiều</b> cho lối đông người hoặc lối quá hẹp, để hai robot không đi ngược chiều nhau.</li>
+        <li><b>Đi chậm</b> quanh bếp, cửa ra vào, khu trẻ em: robot giảm còn một nửa tốc độ và ưu tiên tránh vùng này.</li>
+        <li><b>Đóng lối tạm thời</b> khi lau sàn hoặc kê bàn tiệc: robot đang chạy tự tính lại đường ngay.</li>
+        <li>Với robot thật, bản đồ do robot tự quét (SLAM); tường ảo và lộ trình được vẽ trên ứng dụng của hãng. Sơ đồ này là lớp điều phối của MEKONIQ, cần khớp với bản đồ trên robot.</li>
+      </ul></div>
+  </section>
+  <aside class="stack">
+    <div class="card">
+      <p class="eyebrow">Công cụ</p>
+      <div class="tools" id="tools"></div>
+      <p class="hint" id="toolHint"></p>
+    </div>
+    <div class="card"><p class="eyebrow">Đang chọn</p><div id="sel" class="props"></div></div>
+    <div class="card"><p class="eyebrow">Kiểm tra</p><div id="check" class="warns"></div>
+      <div class="bar" style="margin-top:12px"><span id="dirty" class="dirty"></span></div></div>
+  </aside>
+</main>
+<div id="offline" hidden>Mất kết nối tới hệ thống điều phối — đang kết nối lại…</div>
+
+<script>window.module = { exports: {} };</script><script src="lib/route.js"></script><script>const Route = module.exports;</script>
+<script src="transport.js"></script><script src="common.js"></script>
+<script>
+document.getElementById('brand').innerHTML = BRAND('Serve S1 · Thiết kế lộ trình');
+const $ = id => document.getElementById(id), svg = $('ed');
+let BY = 'Quản lý ca';
+try { const s = JSON.parse(localStorage.getItem('mekoniq.station')); if (s && s.name) BY = s.name; } catch (e) {}
+
+// Draft = the map being edited; it only reaches robots on "Áp dụng".
+let D = null, dirty = false, tool = 'select', sel = null, from = null, drag = null, newer = false, grabbed = false;
+const TOOLS = {
+  select: ['✋ Chọn & kéo', 'Kéo điểm để đổi vị trí. Chạm một lối đi để đặt một chiều, lối hẹp, đi chậm, đóng lối. Phím Delete xoá mục đang chọn.'],
+  add: ['➕ Thêm điểm', 'Chạm lên một lối đi để chèn điểm uốn (rồi kéo để bẻ cong lối đi). Chạm chỗ trống để thêm điểm mới, sau đó nối nó vào lối đi.'],
+  connect: ['🔗 Nối lối đi', 'Chạm điểm thứ nhất rồi điểm thứ hai để tạo lối đi. Chạm tiếp để vẽ nối dài; chạm chỗ trống hoặc Esc để dừng.'],
+};
+const name = id => App.site.points[id] ? App.site.points[id].name
+  : id[0] === 'j' && App.site.points[id.slice(1)] ? 'Lối ' + App.site.points[id.slice(1)].name : 'Điểm ' + id;
+const copy = m => JSON.parse(JSON.stringify({ nodes: m.nodes, edges: m.edges }));
+
+function load(m) { D = copy(m); dirty = false; newer = false; sel = null; from = null; draw(); }
+function change() { dirty = true; draw(); }
+
+function draw() {
+  if (!D || !App.site) return;
+  const S = App.site;
+  svg.setAttribute('viewBox', `-.3 -.3 ${S.floor.w + .6} ${S.floor.h + .6}`);
+  svg.className.baseVal = 'floor ' + tool;
+  svg.innerHTML = floorSVG(false) + netSVG(D, { edit: true, edge: sel && sel.edge, node: sel && sel.node, from }) + '<g id="robots"></g>';
+  drawRobots();
+  $('tools').innerHTML = Object.entries(TOOLS).map(([k, [t]]) => `<button data-tool="${k}" aria-pressed="${tool === k}">${t}</button>`).join('');
+  $('toolHint').textContent = TOOLS[tool][1];
+  panel(); check();
+  $('apply').disabled = !dirty;
+  $('revert').disabled = !dirty;
+  $('dirty').textContent = dirty ? '● Có thay đổi chưa áp dụng' + (newer ? ' — máy khác vừa cập nhật lộ trình, áp dụng sẽ ghi đè' : '') : '';
+  if (App.map) $('ver').textContent = 'Đang chạy: bản ' + App.map.v;
+}
+function drawRobots() {
+  const g = document.getElementById('robots');
+  if (g && App.state) g.innerHTML = App.state.robots.map(r => `<g class="rbm" transform="translate(${r.x} ${r.y})"><circle r=".3"/><text>${r.id}</text></g>`).join('');
+}
+
+function panel() {
+  const P = App.site.points;
+  let h = '<p class="muted small" style="margin:0">Chưa chọn gì. Chạm một điểm hoặc một lối đi trên sơ đồ.</p>';
+  if (sel && sel.edge !== undefined && D.edges[sel.edge]) {
+    const e = D.edges[sel.edge], L = Route.len(D, e.a, e.b).toFixed(1);
+    const box = (k, t, sub) => `<label class="check"><input type="checkbox" data-prop="${k}" ${e[k] ? 'checked' : ''}><span><b>${t}</b><small>${sub}</small></span></label>`;
+    h = `<div><b>${esc(name(e.a))} ${e.oneway ? '→' : '↔'} ${esc(name(e.b))}</b><div class="small muted">Dài ${L} m</div></div>
+      ${box('oneway', 'Một chiều', `Robot chỉ đi theo chiều ${esc(name(e.a))} → ${esc(name(e.b))}`)}
+      ${e.oneway ? '<button class="btn sm" data-do="flip">⇄ Đảo chiều</button>' : ''}
+      ${box('narrow', 'Lối hẹp', 'Mỗi lần chỉ một robot vào, robot khác chờ ở đầu lối')}
+      ${box('slow', 'Đi chậm', 'Khu đông người: giảm một nửa tốc độ, robot ưu tiên đường khác')}
+      ${box('closed', 'Đóng lối', 'Tạm thời không đi, ví dụ đang lau sàn hoặc kê thêm bàn')}
+      <button class="btn sm warn" data-do="delEdge">Xoá lối đi</button>`;
+  } else if (sel && sel.node && D.nodes[sel.node]) {
+    const id = sel.node, n = D.nodes[id], deg = D.edges.filter(e => e.a === id || e.b === id).length;
+    h = `<div><b>${esc(name(id))}</b><div class="small muted">x ${n.x} · y ${n.y} m · ${deg} lối đi nối vào</div></div>
+      ${P[id] ? `<p class="small" style="margin:0">Vị trí robot đứng phục vụ ${esc(P[id].name)}. Kéo để chỉnh, ví dụ sát mép bàn hơn. Điểm này không xoá được.</p>`
+        : '<button class="btn sm warn" data-do="delNode">Xoá điểm và các lối đi nối vào</button>'}`;
+  }
+  setHTML($('sel'), h);
+}
+
+function check() {
+  const bad = Route.unreachable(D, App.site);
+  const deg = id => D.edges.filter(e => e.a === id || e.b === id).length;
+  const loose = Object.keys(D.nodes).filter(id => !App.site.points[id] && deg(id) === 0);
+  const rows = [];
+  if (!bad.length) rows.push('<div class="good">✓ Mọi bàn, trạm và chỗ sạc đều có đường tới</div>');
+  else rows.push(`<div class="bad">⚠ Robot không tới được: ${bad.map(p => esc(name(p))).join(', ')}</div>`);
+  if (loose.length) rows.push(`<div>Điểm chưa nối lối đi nào: ${loose.join(', ')}</div>`);
+  const closed = D.edges.filter(e => e.closed).length;
+  if (closed) rows.push(`<div>${closed} lối đang đóng</div>`);
+  setHTML($('check'), rows.join(''));
+}
+
+// ---- Editing ----
+function newId() { let i = 1; while (D.nodes['p' + i]) i++; return 'p' + i; }
+function addEdge(a, b) {
+  if (a === b || Route.edgeOf(D, a, b)) return;
+  D.edges.push({ a, b });
+}
+function split(i, pt) {   // insert a bend point on an edge, keeping its properties and direction
+  const e = D.edges[i], a = D.nodes[e.a], b = D.nodes[e.b];
+  const L2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
+  const u = Math.max(.1, Math.min(.9, ((pt.x - a.x) * (b.x - a.x) + (pt.y - a.y) * (b.y - a.y)) / L2));
+  const id = newId();
+  D.nodes[id] = { x: Math.round((a.x + u * (b.x - a.x)) * 10) / 10, y: Math.round((a.y + u * (b.y - a.y)) * 10) / 10 };
+  D.edges.splice(i, 1, { ...e, b: id }, { ...e, a: id });
+  return id;
+}
+function del() {
+  if (!sel) return;
+  if (sel.edge !== undefined) D.edges.splice(sel.edge, 1);
+  else if (sel.node && !App.site.points[sel.node]) {
+    delete D.nodes[sel.node];
+    D.edges = D.edges.filter(e => e.a !== sel.node && e.b !== sel.node);
+  } else return;
+  sel = null; change();
+}
+
+svg.addEventListener('pointerdown', e => {
+  const n = e.target.closest('[data-node]');
+  if (tool !== 'select' || !n) return;
+  sel = { node: n.dataset.node }; drag = { id: n.dataset.node, moved: false }; grabbed = true;
+  svg.setPointerCapture(e.pointerId);
+  draw();
+});
+svg.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const p = svgPoint(svg, e), n = D.nodes[drag.id];
+  p.x = Math.max(0, Math.min(App.site.floor.w, p.x)); p.y = Math.max(0, Math.min(App.site.floor.h, p.y));
+  if (p.x === n.x && p.y === n.y) return;
+  D.nodes[drag.id] = p; drag.moved = true; dirty = true;
+  draw();
+});
+svg.addEventListener('pointerup', () => { drag = null; });
+svg.addEventListener('click', e => {
+  const n = e.target.closest('[data-node]'), ed = e.target.closest('[data-edge]'), p = svgPoint(svg, e);
+  if (grabbed) { grabbed = false; return; }   // node picked / dragged on pointerdown
+  if (tool === 'select') {
+    sel = ed ? { edge: +ed.dataset.edge } : null;
+    return draw();
+  }
+  if (tool === 'add') {
+    if (n) return;
+    if (ed) { sel = { node: split(+ed.dataset.edge, p) }; tool = 'select'; return change(); }
+    const id = newId();
+    D.nodes[id] = p; from = id; tool = 'connect';
+    toast('Đã thêm ' + id + ' — chạm một điểm khác để nối vào lối đi');
+    return change();
+  }
+  if (tool === 'connect') {
+    if (!n) { from = null; return draw(); }
+    const id = n.dataset.node;
+    if (from && from !== id) { addEdge(from, id); from = id; return change(); }
+    from = id; draw();
+  }
+});
+$('tools').addEventListener('click', e => { const b = e.target.closest('[data-tool]'); if (b) { tool = b.dataset.tool; from = null; draw(); } });
+$('sel').addEventListener('change', e => {
+  const k = e.target.dataset.prop, ed = sel && D.edges[sel.edge];
+  if (!k || !ed) return;
+  if (e.target.checked) ed[k] = true; else delete ed[k];
+  change();
+});
+$('sel').addEventListener('click', e => {
+  const d = e.target.closest('[data-do]');
+  if (!d) return;
+  if (d.dataset.do === 'flip') { const ed = D.edges[sel.edge]; [ed.a, ed.b] = [ed.b, ed.a]; change(); }
+  if (d.dataset.do === 'delEdge' || d.dataset.do === 'delNode') del();
+});
+addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea')) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); del(); }
+  if (e.key === 'Escape') { from = null; sel = null; draw(); }
+});
+addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });
+
+$('apply').onclick = () => {
+  send({ type: 'map', map: D, by: BY });
+  dirty = false;
+  toast('Đã áp dụng lộ trình — robot đang chạy tự tính lại đường');
+};
+$('revert').onclick = () => App.map && load(App.map);
+$('defaults').onclick = e => armed('defaults', () => send({ type: 'mapReset', by: BY }), () => {
+  $('defaults').textContent = isArmed('defaults') ? 'Chạm lần nữa để khôi phục' : 'Khôi phục mặc định';
+  $('defaults').classList.toggle('armed', isArmed('defaults'));
+});
+
+connect(m => {
+  if (m.type === 'site') $('legend').innerHTML = LEGEND;
+  if (m.type === 'map') { if (!dirty) load(m.map); else { newer = true; draw(); } }
+  if (m.type === 'state') drawRobots();
+});
+</script>
+</body></html>
