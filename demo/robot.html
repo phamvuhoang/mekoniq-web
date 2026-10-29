@@ -241,7 +241,7 @@ function view(r, m) {
       `<p class="lead">${r.why === 'person' ? 'Có người phía trước — robot chờ quý khách đi qua.' : isValetudo() ? `Có vật cản phía trước — robot sẽ thử đi tiếp sau ${retrySec()} giây.` : `Có vật cản phía trước — robot chờ ${App.site.sim.waitSec} giây rồi tìm đường vòng.`}</p>`),
     acts: act('outline', 'Nhân viên: đã dọn lối', 'Path cleared', 'clear') };
   if (r.halt === 'paused') {
-    const pa = App.state.alerts.find(a => a.id === 'pa-' + ID);
+    const pa = App.state.alerts.find(a => a.key === 'pa-' + ID);
     return { bar: 'Tạm dừng', sub: 'Paused', tone: 'warn',
       body: split(face('wait'), 'Tạm dừng · Paused', 'Robot tạm dừng.', 'Robot paused.',
         `<p class="lead">${pa && pa.text.includes(BY) ? 'Đã tạm dừng tại màn hình robot.' : 'Một trạm đã tạm dừng robot này.'}</p>`),
