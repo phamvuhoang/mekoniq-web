@@ -14,7 +14,7 @@ Four static pages sharing `site.css` (tokens copied from `demo/brand.css`, fonts
 ## Update the demo
 Source of truth is `../trial`. After changing UI or logic there:
 
-    cd ../trial && npm run web     # copies data/public, data/lib, data/site.json -> web/demo
+    cd ../trial && npm run web     # copies data/public, data/lib, data/site.demo.json -> web/demo (as demo/site.json)
 
 `demo/transport.js`, `demo/index.html`, `demo/showcase.html` are web-only and are not overwritten.
 
