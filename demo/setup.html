@@ -259,6 +259,7 @@ function render() {
   if (tab === 'robots') renderRobots();
   if (tab === 'roles') renderRoles();
   if (tab === 'backup') renderBackup();
+  healthPolling(tab === 'system');
   if (tab === 'system') renderSystem();
 }
 // "− n +" around a typeable number input; the buttons write through the input's own 'input' handler (same dirty path).
@@ -479,9 +480,15 @@ async function pollHealth() {
     const res = await fetch('/api/health', { cache: 'no-store' });
     const h = res.ok ? await res.json().catch(() => null) : null;
     if (h && h.server) { health = h; healthErr = false; }
-    else if (res.status !== 503) { health = null; healthErr = true; clearInterval(healthTimer); }   // no endpoint: static web demo
+    // Never answered: static web demo, no endpoint. After a good report a 404 is a Node-RED deploy re-creating its routes.
+    else if (!health && res.status !== 503) { healthErr = true; healthPolling(false); }
   } catch (e) {}   // server unreachable: #offline says so; keep the last report
   if (tab === 'system') renderSystem();
+}
+// Polls only while the tab is shown.
+function healthPolling(on) {
+  if (on && !healthTimer && !healthErr) { healthTimer = setInterval(pollHealth, 3000); pollHealth(); }
+  if (!on && healthTimer) { clearInterval(healthTimer); healthTimer = null; }
 }
 const realRobots = () => App.site.robots.filter(r => r.driver === 'valetudo');
 const tableIds = () => Object.keys(App.site.points).filter(k => App.site.points[k].kind === 'table');
@@ -517,7 +524,6 @@ function renderChecks() {
   setHTML($('sysChecks'), checks().map(c => `<div class="chk ${CHK[c.level][0]}"><span class="ic">${CHK[c.level][1]}</span><div><b>${c.text}</b>${c.hint ? `<small>${c.hint}</small>` : ''}</div></div>`).join(''));
 }
 function renderSystem() {
-  if (!healthTimer) { healthTimer = setInterval(pollHealth, 3000); pollHealth(); }
   const h = health;
   renderChecks();
   $('sysOffline').hidden = !healthErr;
