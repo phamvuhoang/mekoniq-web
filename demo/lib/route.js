@@ -58,9 +58,10 @@ function distance(map, x, y, goal) {
 }
 
 // Point ids no robot can reach from its dock — shown as a warning in the map editor.
+// Points without a node are Valetudo-only (placed on the robot's own map): not the route network's business.
 function unreachable(map, site) {
-  const docks = site.robots.map(r => r.dock);
-  return Object.keys(site.points).filter(p => !map.nodes[p] || !docks.some(d => d === p || plan(map, [[d, 0]], p)));
+  const docks = site.robots.map(r => r.dock).filter(d => map.nodes[d]);
+  return Object.keys(site.points).filter(p => map.nodes[p] && !docks.some(d => d === p || plan(map, [[d, 0]], p)));
 }
 
 // Validates a map coming from the UI. Returns a clean copy or null.
@@ -71,7 +72,8 @@ function clean(map, site) {
     if (!/^[\w-]{1,20}$/.test(id) || !n || !isFinite(n.x) || !isFinite(n.y)) return null;
     nodes[id] = { x: Math.round(Math.max(0, Math.min(site.floor.w, +n.x)) * 100) / 100, y: Math.round(Math.max(0, Math.min(site.floor.h, +n.y)) * 100) / 100 };
   }
-  if (Object.keys(site.points).some(p => !nodes[p])) return null;   // every table/station/dock keeps its stop
+  const had = (site.map && site.map.nodes) || {};
+  if (Object.keys(site.points).some(p => had[p] && !nodes[p])) return null;   // a stop that had a node keeps it
   const seen = new Set(), edges = [];
   for (const e of map.edges) {
     if (!e || !nodes[e.a] || !nodes[e.b] || e.a === e.b || seen.has(key(e.a, e.b))) continue;

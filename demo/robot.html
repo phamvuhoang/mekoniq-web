@@ -4,167 +4,330 @@
 <title>MEKONIQ Serve · Robot</title>
 <link rel="icon" href="logo.svg"><link rel="stylesheet" href="brand.css">
 <style>
-  /* Kiosk layout: coloured app bar (state), robot face, one headline, content cards, 1–2 giant buttons. */
-  :root { --k-ok: #1f8a6a; --k-go: #1e6fd0; --k-warn: #e8711e; --k-danger: #d32f2f; --k-idle: #31515a; --k-bg: #e6f2ee; }
-  body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; background: var(--k-bg); font-size: 18px; color: #12313a; }
-  .kbar { display: flex; align-items: center; gap: 12px; padding: 12px 18px; color: #fff; background: var(--k-idle); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
-  .kbar img { width: 30px; height: 30px; background: #fff; border-radius: 8px; padding: 3px; }
-  .kbar .ttl { flex: 1; font-weight: 900; font-size: clamp(17px, 3.4vw, 24px); letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .kbar .meta { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 15px; white-space: nowrap; }
-  body.t-ok .kbar { background: var(--k-ok); } body.t-go .kbar { background: var(--k-go); }
-  body.t-warn .kbar { background: var(--k-warn); } body.t-danger .kbar { background: var(--k-danger); }
-  body.t-warn { --k-bg: #fbeee3; } body.t-danger { --k-bg: #fbe3e3; }
-  main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 18px 18px 130px; max-width: 760px; width: 100%; margin: auto; text-align: center; }
-  .face { width: clamp(110px, 22vw, 160px); }
+  /* Robot tablet: 76px app bar (colour = tone), content column + fixed action zone (rail right in landscape, dock bottom in portrait). */
+  :root { --act-h: 92px; }
+  html, body { height: 100%; }
+  .appbar.robot { height: 76px; gap: 16px; padding: 0 18px; }
+  .appbar.robot > img { width: 46px; height: 46px; padding: 4px; border-radius: 11px; background: #fff; flex: none; }
+  .appbar.robot .title { flex: 1; }
+  .appbar.robot .title b { font-size: 24px; overflow: hidden; text-overflow: ellipsis; }
+  .appbar.robot .title small { font-size: 14px; letter-spacing: .1em; overflow: hidden; text-overflow: ellipsis; }
+  .bat { display: inline-flex; align-items: center; gap: 8px; font: 800 16px var(--font); white-space: nowrap; border-radius: 999px; padding: 4px 0; }
+  .bat i { width: 40px; height: 20px; padding: 2px; border: 2px solid currentColor; border-radius: 5px; background: linear-gradient(90deg, currentColor var(--b, 0%), transparent 0) content-box; }
+  .bat.low { background: var(--danger); color: #fff; padding: 4px 12px; }
+  .rid { display: inline-flex; align-items: center; gap: 8px; font-weight: 900; font-size: 16px; }
+  .stop { height: 54px; padding: 0 22px; border: 4px solid #ffd400; border-radius: 999px; background: var(--danger); color: #fff; font-weight: 900; font-size: 17px; letter-spacing: .04em; white-space: nowrap; flex: none; }
+  body.t-warn .appbar { background: var(--accent); color: var(--deep); }
+  body.t-warn .appbar .title small { color: rgba(7, 29, 33, .7); }
+  body.t-danger .appbar { background: var(--danger); }
+  body.t-danger .appbar .title small { color: rgba(255, 255, 255, .8); }
+
+  .screen { position: relative; }
+  .screen > .body { grid-template: minmax(0, 1fr) / minmax(0, 1fr) 380px; gap: 0; padding: 0; background: var(--paper); }
+  body.t-warn .screen > .body { background: #fff4ec; }
+  body.t-danger .screen > .body { background: #fbe8e6; }
+  #body { min-height: 0; overflow: auto; padding: 28px 32px; }
+  #acts { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #fff; border-left: 1px solid var(--line); }
+  .info { border-radius: 22px; padding: 18px 20px; background: var(--deep); color: #fff; line-height: 1.35; }
+  .info b { display: block; font-size: 20px; font-weight: 900; color: var(--mint); margin-bottom: 4px; }
+  .info span { font-size: 15px; font-weight: 600; color: #cfe0db; }
+  .act.tall { min-height: var(--act-h); }
+  .act.solid { background: var(--danger); color: #fff; }
+  .act.solid.armed { background: #8e1c1c; border-color: #8e1c1c; }
+  #toast { position: absolute; z-index: 40; top: 92px; left: calc((100% - 380px) / 2); transform: translateX(-50%); width: max-content; max-width: calc(100% - 420px); pointer-events: none; }
+
+  /* Content blocks */
+  #body .eyebrow { font-size: 15px; letter-spacing: .14em; margin-bottom: 10px; }
+  body.t-warn #body .eyebrow { color: var(--warn-ink); }
+  body.t-danger #body .eyebrow { color: var(--danger); }
+  #body h1 { margin: 0; font-size: 64px; font-weight: 900; line-height: 1.04; letter-spacing: -.02em; color: var(--deep); text-wrap: balance; }
+  .en { margin: 8px 0 0; font-size: 24px; font-weight: 700; color: var(--gray); }
+  .lead { margin: 18px 0 0; font-size: 19px; font-weight: 600; color: var(--ink); max-width: 34em; text-wrap: pretty; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+  #body .pill { font-size: 17px; padding: 8px 16px; }
+  .split { min-height: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 40px; }
+  .split > .l { display: flex; justify-content: center; }
+  .split .face { width: 260px; }
+  .split.hello h1 { font-size: 84px; }
+  .split.hand h1 { font-size: 58px; }
+  .face { display: block; }
   .face.move { animation: bob 1.2s ease-in-out infinite; }
   @keyframes bob { 50% { transform: translateY(-6px); } }
-  h1 { margin: 0; font-size: clamp(28px, 6vw, 46px); font-weight: 950; letter-spacing: -.02em; line-height: 1.1; text-transform: uppercase; }
-  .sub { margin: 0; color: #4b6870; font-size: clamp(16px, 2.6vw, 20px); font-weight: 600; }
-  .dest { font-size: clamp(44px, 11vw, 92px); font-weight: 950; line-height: 1; margin: 0; color: var(--k-go); }
-  .cards { display: grid; gap: 10px; width: 100%; }
-  .item { display: flex; align-items: center; gap: 14px; background: #fff; border-radius: 18px; padding: 16px 20px; box-shadow: 0 4px 14px rgba(20,60,60,.1); text-align: left; font-weight: 850; font-size: clamp(18px, 3.4vw, 24px); }
-  .item .q { color: var(--k-ok); font-weight: 950; }
-  .item .grow { flex: 1; }
-  .item .ic { font-size: 30px; }
-  .item.off { opacity: .55; text-decoration: line-through; }
-  .item .pill { font-size: 13px; text-decoration: none; }
-  .item small { display: block; font-weight: 600; font-size: 15px; color: #4b6870; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; width: 100%; }
-  .tile { border: 0; border-radius: 26px; min-height: clamp(150px, 26vw, 210px); padding: 16px; color: #fff; background: var(--k-ok);
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-weight: 950; font-size: clamp(19px, 3.4vw, 26px); line-height: 1.15; text-transform: uppercase;
-    box-shadow: 0 8px 0 rgba(0,0,0,.18), 0 12px 24px rgba(0,0,0,.12); transition: transform .08s; }
-  .tile:active { transform: translateY(4px); box-shadow: 0 4px 0 rgba(0,0,0,.18); }
-  .tile .ic { font-size: clamp(48px, 9vw, 72px); line-height: 1; }
-  .tile.orange { background: #f26b2a; } .tile.red { background: var(--k-danger); } .tile.blue { background: var(--k-go); } .tile.gray { background: #6d8288; }
-  .tile.slim { min-height: 92px; flex-direction: row; font-size: 20px; } .tile.slim .ic { font-size: 34px; }
-  .tile:disabled { opacity: .45; }
-  .tile.armed { background: #8e1c1c; animation: pulse 1s infinite; }
-  .tiles.one { grid-template-columns: 1fr; }
-  .tables { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; width: 100%; }
-  .tables .pick { min-height: 96px; border-radius: 18px; border: 2px solid #c8dcd6; background: #fff; box-shadow: 0 3px 8px rgba(20,60,60,.08); }
-  .tables .pick small { font-size: 13px; font-weight: 800; text-transform: uppercase; color: #4b6870; }
-  .tables .pick b { font-size: 36px; }
-  .tables .pick[aria-pressed="true"] { background: var(--k-go); border-color: var(--k-go); color: #fff; }
-  .meter { height: 10px; background: #fff; border-radius: 5px; overflow: hidden; max-width: 420px; width: 100%; }
-  .meter > div { height: 100%; background: var(--k-ok); }
-  #estop { position: fixed; right: 18px; bottom: 18px; width: 100px; height: 100px; border-radius: 50%; border: 7px solid #ffd400;
-    background: var(--k-danger); color: #fff; font-weight: 950; font-size: 16px; letter-spacing: .04em; box-shadow: 0 8px 30px rgba(0,0,0,.35); z-index: 30; }
-  #start { position: fixed; inset: 0; z-index: 50; background: var(--k-ok); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; border: 0; color: #fff; width: 100%; }
-  #start .face { width: 170px; }
-  #start b { font-size: clamp(24px, 5vw, 36px); text-transform: uppercase; } #start span { font-size: 18px; opacity: .85; }
+
+  /* 4-tray box: active trays glow mint */
+  .trays { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 14px; border-radius: 26px; background: #dbe6e8; width: 360px; }
+  .tray { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 120px; padding: 12px 14px; border-radius: 18px; background: rgba(255, 255, 255, .55); color: var(--gray); }
+  .tray span { font-size: 13px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+  .tray b { font-size: 22px; font-weight: 900; line-height: 1.15; }
+  .tray.on { background: var(--mint); color: var(--deep); box-shadow: 0 0 0 4px #fff, 0 0 0 8px var(--mint); }
+  #acts .trays { width: auto; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 10px; border-radius: 20px; }
+  #acts .tray { min-height: 72px; padding: 8px; text-align: center; }
+  #acts .tray b { font-size: 15px; }
+  #acts .tray.on { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--mint); }
+
+  /* Moving: big destination + route card */
+  .moving { min-height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: center; }
+  .mv { container-type: inline-size; min-width: 0; }
+  .mvhead { display: flex; align-items: center; gap: 16px; }
+  .mvhead .face { width: 96px; flex: none; }
+  .mvhead .eyebrow { margin: 0 !important; }
+  .mvhead p { margin: 4px 0 0; font-weight: 700; color: var(--gray); }
+  .dest { margin: 10px 0 4px; font-size: min(150px, 100cqw / (var(--n) * .64)); font-weight: 900; line-height: 1; letter-spacing: -.03em; color: var(--deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mv #timer { margin: 0; font-size: 22px; font-weight: 800; color: var(--ink); min-height: 1.4em; }
+  .yield { margin-top: 18px; padding: 14px 18px; border-radius: 16px; background: var(--accent); color: var(--alert-ink); font-size: 19px; font-weight: 800; }
+  .route h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--gray); }
+  .route ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .route li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--paper); font-size: 17px; }
+  .route li .k { min-width: 38px; text-align: center; border-radius: 10px; padding: 3px 6px; background: var(--deep); color: var(--mint); font-weight: 900; font-size: 14px; }
+  .route li b { flex: 1; min-width: 0; font-weight: 900; }
+  .route li small { font-size: 13px; font-weight: 800; color: var(--gray); white-space: nowrap; }
+  .route li.now { background: var(--pill-go); }
+  .route li.off { opacity: .5; }
+  .route li.off b { text-decoration: line-through; }
+  .route .nav { margin: 10px 0 0; font-weight: 800; color: var(--warn-ink); }
+  .card.note { margin-top: 18px; font-size: 18px; font-weight: 700; }
+  .card.note small { display: block; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--gray); }
+
+  /* Standby at a station: choose task, choose tables */
+  .load { height: 100%; display: flex; flex-direction: column; gap: 14px; }
+  .step { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .step h2 { margin: 0; font-size: 20px; font-weight: 900; }
+  .step h2 small { font-size: 15px; font-weight: 700; color: var(--gray); }
+  .step .count { margin-left: auto; font: 500 18px var(--mono); }
+  .choice { display: inline-flex; flex-direction: column; padding: 10px 22px; border-radius: 16px; background: var(--deep); color: var(--mint); line-height: 1.15; }
+  .choice b { font-size: 20px; font-weight: 900; } .choice small { font-size: 13px; opacity: .7; }
+  .load .tt-grid { flex: 1; min-height: 240px; }
+
+  #start { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; width: 100%; border: 0; background: var(--deep); color: #fff; }
+  #start .face { width: 240px; margin-bottom: 12px; }
+  #start b { font-size: 40px; font-weight: 900; } #start small { font-size: 22px; color: var(--mint); font-weight: 700; } #start span { font-size: 18px; color: #9bb6b0; }
+
+  @media (orientation: portrait), (max-width: 900px) {
+    .screen > .body { grid-template: minmax(0, 1fr) auto / minmax(0, 1fr); }
+    #acts { flex-direction: row; flex-wrap: wrap; border-left: 0; border-top: 1px solid var(--line); padding: 16px; }
+    #acts > * { flex: 1 1 220px; }
+    #acts > .info, #acts > .trays { flex-basis: 100%; }
+    #toast { left: 50%; max-width: calc(100% - 32px); }
+    #body h1, .split.hand h1 { font-size: 48px; }
+    .split.hello h1 { font-size: 56px; }
+    .split { grid-template-columns: minmax(0, 1fr); justify-items: center; align-content: center; text-align: center; gap: 24px; }
+    .split .face { width: 200px; }
+    .split .eyebrow, .split .chips { justify-content: center; }
+    .split .lead { margin-inline: auto; }
+    .moving { grid-template-columns: minmax(0, 1fr); align-content: center; }
+    .dest { font-size: min(96px, 100cqw / (var(--n) * .64)); }
+  }
+  :root[data-orient=portrait] .screen > .body { grid-template: minmax(0, 1fr) auto / minmax(0, 1fr); }
+  :root[data-orient=portrait] #acts { flex-direction: row; flex-wrap: wrap; border-left: 0; border-top: 1px solid var(--line); padding: 16px; }
+  :root[data-orient=portrait] #acts > * { flex: 1 1 220px; }
+  :root[data-orient=portrait] #acts > .info, :root[data-orient=portrait] #acts > .trays { flex-basis: 100%; }
+  :root[data-orient=portrait] #toast { left: 50%; max-width: calc(100% - 32px); }
+  :root[data-orient=portrait] #body h1, :root[data-orient=portrait] .split.hand h1 { font-size: 48px; }
+  :root[data-orient=portrait] .split.hello h1 { font-size: 56px; }
+  :root[data-orient=portrait] .split { grid-template-columns: minmax(0, 1fr); justify-items: center; align-content: center; text-align: center; gap: 24px; }
+  :root[data-orient=portrait] .split .face { width: 200px; }
+  :root[data-orient=portrait] .split .eyebrow, :root[data-orient=portrait] .split .chips { justify-content: center; }
+  :root[data-orient=portrait] .split .lead { margin-inline: auto; }
+  :root[data-orient=portrait] .moving { grid-template-columns: minmax(0, 1fr); align-content: center; }
+  :root[data-orient=portrait] .dest { font-size: min(96px, 100cqw / (var(--n) * .64)); }
 </style>
 </head><body>
-<header class="kbar"><img src="logo.svg" alt=""><span class="ttl" id="ttl">MEKONIQ Serve</span>
-  <span class="meta"><span id="bat">🔋 —</span><span class="dot" id="conn" title="Kết nối hệ thống"></span></span></header>
-<main id="view" aria-live="polite"></main>
-<button id="estop" aria-label="Dừng khẩn cấp">DỪNG</button>
-<button id="start"><span id="startFace"></span><b>Chạm để khởi động</b><span>Bật âm thanh thông báo tiếng Việt</span></button>
+<div class="screen">
+  <header class="appbar robot"><img src="logo.svg" alt="MEKONIQ">
+    <div class="title"><b id="bar">MEKONIQ Serve</b><small id="sub"></small></div>
+    <span class="bat" id="bat" hidden><i></i><span></span></span>
+    <span class="rid"><i class="dot" id="conn" title="Kết nối hệ thống"></i><span id="rid"></span></span>
+    <span id="clock"></span>
+    <button id="estop" class="stop" aria-label="Dừng khẩn cấp">DỪNG · STOP</button></header>
+  <div class="body" id="main"><section id="body" aria-live="polite"></section><aside id="acts"></aside></div>
+  <div id="toast" class="toast" hidden aria-live="polite"></div>
+</div>
+<button id="start"><span id="startFace"></span><b>Chạm để khởi động</b><small>Tap to start</small><span>Bật âm thanh thông báo · Enable sound alerts</span></button>
 <div id="offline" hidden>Mất kết nối tới hệ thống điều phối — đang kết nối lại…</div>
 
 <script src="transport.js"></script><script src="common.js"></script>
 <script>
 // Which robot this tablet is mounted on: robot.html?robot=R2 (default R1).
 const ID = new URLSearchParams(location.search).get('robot') || 'R1';
+const cfg = () => (App.site && App.site.robots.find(r => r.id === ID)) || {};
+const isValetudo = () => cfg().driver === 'valetudo';
+const retrySec = () => (cfg().valetudo && cfg().valetudo.retrySec) || 15;
 const BY = 'Màn hình ' + ID;
 const $ = id => document.getElementById(id);
 document.title = 'MEKONIQ · Robot ' + ID;
+$('rid').textContent = ID;
 $('start').onclick = () => { enableSound(); $('start').hidden = true; };
 $('estop').onclick = () => send({ type: 'estop', robot: ID, by: BY });
+startClock();
 
-// Robot face on the tablet: mood follows the state (happy / go / wait / sad / sleep).
+// Robot toast: one pill at the top centre of the content area (common.js puts it bottom-centre).
+window.toast = (text, level = 'info') => {
+  const t = $('toast');
+  t.className = 'toast ' + level; t.textContent = text; t.hidden = false;
+  clearTimeout(t.timer); t.timer = setTimeout(() => { t.hidden = true; }, 2600);
+};
+
+// Robot face (SVG only): mint round glowing eyes; sad/wait = accent oval eyes; sleep = lines.
 function face(mood, move) {
-  const c = mood === 'sad' ? '#ff9f68' : '#b9fb75';
-  const eyes = { happy: `<path d="M40 48q6-9 12 0M68 48q6-9 12 0" stroke="${c}" stroke-width="5" fill="none" stroke-linecap="round"/>`,
-    sleep: `<path d="M40 48h12M68 48h12" stroke="${c}" stroke-width="5" stroke-linecap="round"/>` }[mood]
-    || `<circle cx="46" cy="46" r="6" fill="${c}"/><circle cx="74" cy="46" r="6" fill="${c}"/>`;
-  const mouth = { sad: 'M50 64q10-8 20 0', wait: 'M52 61h16', sleep: 'M55 61h10' }[mood] || 'M48 57q12 10 24 0';
-  return `<svg class="face${move ? ' move' : ''}" viewBox="0 0 120 100" aria-hidden="true">
-    <line x1="60" y1="2" x2="60" y2="12" stroke="#7d959b" stroke-width="4"/><circle cx="60" cy="4" r="4" fill="#e8711e"/>
-    <circle cx="14" cy="50" r="10" fill="#e8711e"/><circle cx="106" cy="50" r="10" fill="#e8711e"/>
-    <rect x="18" y="12" width="84" height="78" rx="24" fill="#dbe6e8" stroke="#9fb3b8" stroke-width="3"/>
-    <rect x="28" y="26" width="64" height="48" rx="15" fill="#12333a"/>${eyes}
-    <path d="${mouth}" stroke="${c}" stroke-width="5" fill="none" stroke-linecap="round"/></svg>`;
+  const alert = mood === 'sad' || mood === 'wait', c = alert ? '#ff9f68' : '#b9fb75';
+  const eyes = mood === 'sleep' ? `<path d="M70 94h34M136 94h34" stroke="${c}" stroke-width="9" stroke-linecap="round"/>`
+    : alert ? `<ellipse cx="87" cy="92" rx="12" ry="18" fill="${c}"/><ellipse cx="153" cy="92" rx="12" ry="18" fill="${c}"/>`
+    : `<circle cx="87" cy="92" r="17" fill="${c}"/><circle cx="153" cy="92" r="17" fill="${c}"/>`;
+  const mouth = { sad: 'M98 140q22-16 44 0', wait: 'M100 134h40', sleep: 'M108 134h24' }[mood] || 'M94 126q26 22 52 0';
+  return `<svg class="face${move ? ' move' : ''}" viewBox="0 0 240 200" aria-hidden="true">
+    <defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <rect x="6" y="6" width="228" height="188" rx="60" fill="#dbe6e8" stroke="#b7c9cc" stroke-width="4"/>
+    <rect x="30" y="34" width="180" height="132" rx="40" fill="#12333a"/>
+    <g filter="url(#glow)">${eyes}<path d="${mouth}" stroke="${c}" stroke-width="8" fill="none" stroke-linecap="round"/></g></svg>`;
 }
 $('startFace').innerHTML = face('happy');
 
-let pick = [];   // tables chosen while on standby
-// Giant kiosk buttons. Destructive ones use the shared two-tap confirmation.
-const tile = (act, ic, label, cls = '', extra = '') => `<button class="tile ${cls}" data-act="${act}" ${extra}><span class="ic">${ic}</span>${label}</button>`;
-const armTile = (key, act, ic, label, armedLabel, cls = 'orange') =>
-  `<button class="tile ${cls} ${isArmed(key) ? 'armed' : ''}" data-act="${act}"><span class="ic">${isArmed(key) ? '⚠️' : ic}</span>${isArmed(key) ? armedLabel : label}</button>`;
-const tiles = (...t) => (t = t.filter(Boolean), `<div class="tiles ${t.length === 1 ? 'one' : ''}">${t.join('')}</div>`);
-
-function trayList(m, filter) {
-  return `<div class="cards">${m.stops.filter(filter).map(s => {
-    const off = s.status === 'skipped' || s.status === 'cancelled';
-    return `<div class="item ${off ? 'off' : ''}"><span class="ic">🍽</span><span class="grow"><span class="q">Khay ${s.tray}</span> → Bàn ${short(s.p)}</span>${off ? `<span class="pill warn">${m.loaded ? 'Đã huỷ · mang về' : 'Đã huỷ · không xếp'}</span>` : s.status === 'done' ? '<span class="pill ok">Đã giao</span>' : ''}</div>`;
-  }).join('')}</div>`;
+let pick = [];   // tables chosen while on standby at a station
+const act = (cls, vi, en, dataAct, extra = '') => `<button class="act ${cls}" data-act="${dataAct}" ${extra}>${L(vi, en)}</button>`;
+// Two-tap button: first tap arms it (label changes), second tap runs (see click handler).
+// Each screen has its own key so an armed button never carries over to the next screen.
+const armAct = (key, cls, [vi, en], [avi, aen], dataAct) => isArmed(key) ? act(cls + ' armed', avi, aen, dataAct, `data-arm="${key}"`) : act(cls, vi, en, dataAct, `data-arm="${key}"`);
+const info = (title, text) => `<div class="info"><b>${title}</b><span>${text}</span></div>`;
+// Two-column block: face (or tray box) | eyebrow, headline, English line, extra.
+const split = (left, eyebrow, h1, en, extra = '', cls = '') =>
+  `<div class="split ${cls}"><div class="l">${left}</div><div><p class="eyebrow">${eyebrow}</p><h1>${h1}</h1><p class="en">${en}</p>${extra}</div></div>`;
+const trays = (active, labels) => `<div class="trays">${labels.map((t, i) =>
+  `<div class="tray${active.includes(i + 1) ? ' on' : ''}"><span>K${i + 1}</span><b>${esc(t)}</b></div>`).join('')}</div>`;
+const nTrays = () => Array.from({ length: App.site.trays }, (_, i) => i + 1);
+// Tray i -> what is on it for this delivery.
+const trayLabels = m => nTrays().map(i => {
+  const s = m.stops.find(x => x.a === 'handoff' && x.tray === i);
+  if (!s) return 'trống';
+  if (s.status === 'done') return 'Đã giao';
+  if (s.status === 'skipped' || s.status === 'cancelled') return m.loaded ? 'Đã huỷ · mang về' : 'Đã huỷ · không xếp';
+  return 'Bàn ' + short(s.p);
+});
+const isOff = s => ['skipped', 'cancelled', 'manual'].includes(s.status);
+// Stops still ahead (plus delivered/cancelled tables, dimmed).
+function routeList(m) {
+  const rows = m.stops.map((s, i) => [s, i]).filter(([s, i]) => i >= m.cur || s.a === 'handoff');
+  const last = rows.filter(([s]) => !isOff(s) && s.status !== 'done').pop();
+  return `<ol>${rows.map(([s, i]) => {
+    const st = isOff(s) ? 'Đã huỷ' : s.status === 'done' ? 'Xong' : i === m.cur ? 'Đang tới' : last && last[1] === i ? 'Cuối' : 'Tiếp theo';
+    return `<li class="${i === m.cur ? 'now' : isOff(s) || s.status === 'done' ? 'off' : ''}"><span class="k">${s.tray ? 'K' + s.tray : s.a === 'return' ? '↩' : '•'}</span><b>${s.a === 'return' ? 'Về ' : ''}${esc(pname(s.p))}</b><small>${st}</small></li>`;
+  }).join('')}</ol>`;
 }
-const note = m => m.note ? `<div class="item"><span class="ic">📝</span><span class="grow">${esc(m.note)}</span></div>` : '';
+// Orchestrator flags `charging` as soon as battery < lowBattery, even mid-job ("về sạc sau việc này"), so test the level itself.
+const lowBat = r => r.battery < App.site.timing.lowBattery;
+const batChip = r => lowBat(r) ? `<div class="chips"><span class="pill danger">Pin ${Math.round(r.battery)}% · về sạc sau việc này</span></div>` : '';
 
-// Each state -> { bar: app-bar title, tone: bar colour, body: screen content }.
+// Each state -> { bar, sub: app-bar title + English line, tone, body: content column, acts: action zone }.
 function view(r, m) {
-  if (!r) return { bar: 'Robot ' + ID, tone: 'danger', body: `<h1>Không có robot "${esc(ID)}" trong cấu hình</h1>` };
-  if (r.halt === 'estop') return { bar: 'An toàn · Dừng khẩn cấp', tone: 'danger', body: `${face('sad')}<h1>Đã dừng khẩn cấp</h1>
-      <p class="sub">Nhân viên kiểm tra quanh robot. Khi an toàn, nhả nút dừng và cho robot chạy tiếp.</p>
-      ${tiles(armTile('rs', 'resume', '▶️', 'Nhả dừng · Chạy tiếp', 'Chạm lần nữa: đã kiểm tra an toàn', 'red'))}` };
+  if (!r) return { bar: 'Robot ' + ID, sub: 'Not configured', tone: 'danger', body: split(face('sad'), 'Cấu hình · Setup', `Không có robot "${esc(ID)}" trong cấu hình`, 'This robot is not in the site configuration.'),
+    acts: info('Chưa cấu hình', 'Thêm robot trong “Cấu hình” · Add it in Setup') };
+  if (r.halt === 'estop') return { bar: 'An toàn · Dừng khẩn cấp', sub: 'Safety · Emergency stop', tone: 'danger',
+    body: split(face('sad'), 'An toàn · Safety', 'Robot đã dừng hẳn.', 'The robot has fully stopped.',
+      '<p class="lead">Nhân viên kiểm tra quanh robot. Khi an toàn, nhả nút dừng và cho robot chạy tiếp.</p>'),
+    acts: armAct('rs', 'danger solid', ['Nhả dừng · Chạy tiếp', 'Release · Resume'], ['Chạm lần nữa — đã kiểm tra an toàn', 'Tap again — area checked'], 'resume') };
+  // `manual` needs a mission to hand over (orchestrator ignores it otherwise).
+  const manual = m && armAct('man', 'danger', ['Xử lý thủ công', 'Manual handling'], ['Chạm lần nữa · chuyển thủ công', 'Tap again to confirm'], 'manual');
   if (r.halt === 'blocked') {
-    if (r.why === 'noroute') return { bar: 'Không có lộ trình', tone: 'warn', body: `${face('sad')}<h1>Lối đi đã bị đóng</h1>
-      <p class="sub">Không có đường tới ${esc(pname(r.target))}. Quản lý mở lại lối đi trong “Thiết kế lộ trình”, hoặc chuyển xử lý thủ công.</p>` };
-    return { bar: 'Cần nhân viên hỗ trợ', tone: 'warn', body: `${face('sad')}<h1>Xin nhường đường</h1>
-      <p class="sub">Lối đi phía trước bị chặn và không còn đường vòng. Vui lòng dọn lối đi.</p>
-      ${tiles(tile('clear', '🧹', 'Nhân viên: đã dọn lối đi', 'blue'))}` };
+    if (r.why === 'noroute') return { bar: 'Không có lộ trình', sub: 'No route', tone: 'warn',
+      body: split(face('sad'), 'Không có lộ trình · No route', `Không có đường tới ${esc(pname(r.target))}.`, `No route to ${esc(pname(r.target))}.`,
+        `<p class="lead">Quản lý định vị điểm này trong “Cấu hình”${hasSim() ? ' hoặc kiểm tra lối đi trong “Thiết kế lộ trình”' : ''}, hoặc chuyển xử lý thủ công.</p>`),
+      acts: manual || info('Không có lộ trình', 'Mở lại lối đi trong “Thiết kế lộ trình” · Reopen a lane in Route design') };
+    return { bar: 'Cần nhân viên hỗ trợ', sub: 'Staff needed', tone: 'warn',
+      body: split(face('sad'), 'Lối đi bị chặn · Path blocked', 'Xin nhường đường.', 'Please make way.',
+        '<p class="lead">Lối đi phía trước bị chặn và không còn đường vòng. Vui lòng dọn lối đi.</p>'),
+      acts: act('dark tall', 'Nhân viên: đã dọn lối', 'Path cleared', 'clear') + (manual || '') };
   }
-  if (r.nav === 'wait' && r.why !== 'robot' && !r.halt) return { bar: 'Robot đang chờ', tone: 'warn', body: `${face('wait')}<h1>Xin nhường đường</h1>
-      <p class="sub">${r.why === 'person' ? 'Có người phía trước — robot chờ quý khách đi qua.' : `Có vật cản phía trước — robot chờ ${App.site.sim.waitSec} giây rồi tìm đường vòng.`}</p>
-      ${tiles(tile('clear', '🧹', 'Nhân viên: đã dọn lối đi', 'blue slim'))}` };
-  if (r.halt === 'paused') return { bar: 'Tạm dừng', tone: 'warn', body: `${face('wait')}<h1>Robot tạm dừng</h1><p class="sub">Một trạm đã tạm dừng robot này.</p>
-      ${tiles(tile('resume', '▶️', 'Chạy tiếp'))}` };
-  if (r.offline) return { bar: 'Mất kết nối', tone: 'danger', body: `${face('sad')}<h1>Mất kết nối robot</h1><p class="sub">Đang chờ robot kết nối lại hệ thống…</p>` };
+  if (r.nav === 'wait' && r.why !== 'robot' && !r.halt) return { bar: 'Robot đang chờ', sub: 'Waiting', tone: 'warn',
+    body: split(face('wait'), 'Đang chờ · Waiting', 'Xin nhường đường.', 'Please make way.',
+      `<p class="lead">${r.why === 'person' ? 'Có người phía trước — robot chờ quý khách đi qua.' : isValetudo() ? `Có vật cản phía trước — robot sẽ thử đi tiếp sau ${retrySec()} giây.` : `Có vật cản phía trước — robot chờ ${App.site.sim.waitSec} giây rồi tìm đường vòng.`}</p>`),
+    acts: act('outline', 'Nhân viên: đã dọn lối', 'Path cleared', 'clear') };
+  if (r.halt === 'paused') {
+    const pa = App.state.alerts.find(a => a.id === 'pa-' + ID);
+    return { bar: 'Tạm dừng', sub: 'Paused', tone: 'warn',
+      body: split(face('wait'), 'Tạm dừng · Paused', 'Robot tạm dừng.', 'Robot paused.',
+        `<p class="lead">${pa && pa.text.includes(BY) ? 'Đã tạm dừng tại màn hình robot.' : 'Một trạm đã tạm dừng robot này.'}</p>`),
+      acts: act('primary', 'Chạy tiếp', 'Resume', 'resume') };
+  }
+  if (r.offline) return { bar: 'Mất kết nối', sub: 'Offline', tone: 'danger',
+    body: split(face('sad'), 'Mất kết nối · Offline', 'Mất kết nối robot.', 'Robot connection lost.', '<p class="lead">Đang chờ robot kết nối lại hệ thống…</p>'),
+    acts: info('Mất kết nối', 'Đang chờ robot kết nối lại · Waiting for the robot to reconnect') };
 
   if (r.phase === 'atStop' && m) {
     const s = m.stops[m.cur], place = pname(s.p);
-    if (s.a === 'handoff') return { bar: `${place} · Giao món đến`, tone: 'ok', body: `${face('happy')}
-      <h1>Xin mời nhận món ăn!</h1><p class="sub">Robot ${ID} 🤖 · món của quý khách ở <b>Khay ${s.tray}</b></p>
-      <div class="cards"><div class="item"><span class="ic">🍜</span><span class="grow"><span class="q">Khay ${s.tray}</span> · Món của ${esc(place)}${m.note ? `<small>📝 ${esc(m.note)}</small>` : ''}</span><span class="ic">✅</span></div></div>
-      ${tiles(tile('confirm', '🍽️', 'Đã nhận món'), armTile('cx', 'cancelStop', '↩️', 'Trả lại cho bếp', 'Chạm lần nữa · robot mang món về'))}
-      <p class="sub" id="timer"></p>` };
-    if (s.a === 'load') return { bar: `${place} · Xếp món lên khay`, tone: 'go', body: `${face('happy')}<h1>Xếp món lên khay</h1>
-      <p class="sub">${esc(m.label)}</p><div class="cards">${trayList(m, x => x.a === 'handoff')}${note(m)}</div>
-      ${tiles(tile('confirm', '🚀', 'Đã xếp xong · Đi giao'), armTile('cm', 'cancel', '✕', 'Huỷ nhiệm vụ', 'Chạm lần nữa để huỷ', 'red'))}` };
-    if (s.a === 'return') return { bar: `${place} · Trả đồ bị huỷ`, tone: 'warn', body: `${face('wait')}<h1>Trả lại đồ bị huỷ</h1>
-      <div class="cards">${s.trays.map(t => `<div class="item"><span class="ic">↩️</span><span class="grow"><span class="q">Khay ${t.tray}</span> · Bàn ${short(t.table)}</span></div>`).join('')}</div>
-      ${tiles(tile('confirm', '✅', 'Đã nhận lại đồ'))}` };
-    if (s.a === 'collect') return { bar: `${place} · Thu dọn bàn`, tone: 'ok', body: `${face('happy')}<h1>Mời đặt chén đĩa lên khay</h1>
-      <p class="sub">Robot sẽ mang về ${esc(pname(App.site.dishPoint))}.</p>
-      ${tiles(tile('confirm', '🧺', 'Xong · Mang về khu rửa'), armTile('cm', 'cancel', '✕', 'Không có gì để thu', 'Chạm lần nữa: cho robot về', 'gray'))}` };
-    if (s.a === 'unload') return { bar: `${place} · Dỡ chén đĩa`, tone: 'go', body: `${face('happy')}<h1>Dỡ chén đĩa</h1>
-      ${tiles(tile('confirm', '✅', 'Đã dỡ xong'))}` };
+    if (s.a === 'handoff') return { bar: `${place} · Giao món đến`, sub: 'Your order is here', tone: lowBat(r) ? 'warn' : 'ok',
+      body: split(trays([s.tray], trayLabels(m)), `${esc(place)} · Đã tới`, `Mời quý khách lấy món ở Khay ${s.tray}`, `Please take your order from Tray ${s.tray}`,
+        `${m.note ? `<div class="card note"><small>Ghi chú · Note</small>${esc(m.note)}</div>` : ''}<p class="lead" id="timer"></p>${batChip(r)}`, 'hand'),
+      acts: act('primary', 'Đã nhận món', 'Got it, thanks', 'confirm')
+        + armAct('cx', 'warn', ['Trả lại bếp', 'Not mine, send back'], ['Chạm lần nữa · robot mang món về', 'Tap again to send it back'], 'cancelStop') };
+    if (s.a === 'load') {
+      const open = m.stops.filter(x => x.a === 'handoff' && !isOff(x)).map(x => x.tray);
+      return { bar: `${place} · Xếp món lên khay`, sub: 'Load the trays', tone: 'go',
+        body: split(trays(open, trayLabels(m)), esc(m.label), 'Xếp món lên khay.', 'Load each tray for its table.',
+          m.note ? `<div class="card note"><small>Ghi chú · Note</small>${esc(m.note)}</div>` : '', 'hand'),
+        acts: act('primary', 'Đã xếp xong · Đi giao', 'Loaded · Go deliver', 'confirm')
+          + armAct('cm', 'danger', ['Huỷ nhiệm vụ', 'Cancel task'], ['Chạm lần nữa để huỷ', 'Tap again to cancel'], 'cancel') };
+    }
+    if (s.a === 'return') return { bar: `${place} · Trả đồ bị huỷ`, sub: 'Cancelled items back', tone: 'warn',
+      body: split(trays(s.trays.map(t => t.tray), nTrays().map(i => { const t = s.trays.find(x => x.tray === i); return t ? 'Bàn ' + short(t.table) : 'trống'; })),
+        `${esc(place)} · Trả đồ`, 'Trả lại đồ bị huỷ.', 'Cancelled items are back.',
+        `<p class="lead">${s.trays.map(t => `Khay ${t.tray} · Bàn ${esc(short(t.table))}`).join(' · ')}</p>`, 'hand'),
+      acts: act('primary', 'Đã nhận lại đồ', 'Items received', 'confirm') };
+    if (s.a === 'collect') return { bar: `${place} · Thu dọn bàn`, sub: 'Collect dishes', tone: 'ok',
+      body: split(face('happy'), `${esc(place)} · Thu dọn`, 'Mời đặt chén đĩa lên khay.', 'Please place used dishes on the trays.',
+        `<p class="lead">Robot sẽ mang về ${esc(pname(App.site.dishPoint))}.</p>`),
+      acts: act('primary', 'Xong · Mang về khu rửa', 'Done · To the dish area', 'confirm')
+        + armAct('cc', 'outline', ['Không có gì để thu', 'Nothing to collect'], ['Chạm lần nữa: cho robot về', 'Tap again to send it back'], 'cancel') };
+    if (s.a === 'unload') return { bar: `${place} · Dỡ chén đĩa`, sub: 'Unload dishes', tone: 'go',
+      body: split(face('happy'), esc(place), 'Dỡ chén đĩa.', 'Please unload the dishes.'),
+      acts: act('primary', 'Đã dỡ xong', 'Unloaded', 'confirm') };
     if (s.a === 'standby') {
-      const station = App.site.points[s.p].kind === 'station';
+      const toDish = s.p !== App.site.dishPoint && act('outline', 'Mang chén về khu rửa', 'Take dishes to wash', 'toDish');
+      if (App.site.points[s.p].kind !== 'station') return { bar: `${place} · Chờ lệnh`, sub: 'Standby', tone: 'go',
+        body: split(face('wait'), `${esc(place)} · Chờ lệnh`, 'Robot đang chờ.', 'Robot is waiting.', `<p class="lead">Gọi bởi ${esc(m.by)}</p>`),
+        acts: (toDish || '') + act('primary', 'Xong · Cho robot về', 'Done · Send robot back', 'release') };
       const tables = Object.keys(App.site.points).filter(k => App.site.points[k].kind === 'table');
-      return { bar: `${place} · Chờ lệnh`, tone: 'go', body: `<p class="sub">Gọi bởi ${esc(m.by)}</p>
-        ${station ? `<h1>Chọn bàn cần giao · ${pick.length}/${App.site.trays} khay</h1>
-          <div class="tables">${tables.map(t => `<button class="pick" data-t="${t}" aria-pressed="${pick.includes(t)}"><small>${pick.includes(t) ? '✓ Khay ' + (pick.indexOf(t) + 1) : 'Bàn'}</small><b>${short(t)}</b></button>`).join('')}</div>` :
-          `${face('wait')}<h1>Robot đang chờ</h1>`}
-        ${tiles(station && tile('dispatch', '🚀', pick.length ? `Đi giao ${pick.length} bàn` : 'Chọn bàn để giao', '', pick.length ? '' : 'disabled'),
-          s.p !== App.site.dishPoint && tile('toDish', '🧺', 'Mang chén về khu rửa', 'blue'),
-          tile('release', '🏠', 'Xong · Cho robot về', 'gray'))}` };
+      return { bar: `${place} · Chờ lệnh`, sub: 'Choose tables', tone: 'go',
+        body: `<div class="load"><p class="eyebrow">Gọi bởi ${esc(m.by)}</p>
+          <div class="step"><h2>1 · Chọn việc <small>Choose task</small></h2><div class="choice" aria-current="true">${L('Giao món', 'Deliver')}</div></div>
+          <div class="step"><h2>2 · Chọn bàn <small>Choose tables</small></h2><span class="count">${pick.length}/${App.site.trays} khay</span></div>
+          <div class="tt-grid cols6">${tables.map(t => {
+            const [txt, cls] = tableState(t), i = pick.indexOf(t);
+            return `<button class="tt ${cls}" data-t="${t}" aria-pressed="${i >= 0}"><span class="lbl">Bàn</span><b>${esc(short(t))}</b><span class="st">${esc(txt)}</span>${i >= 0 ? `<span class="tag">✓ K${i + 1}</span>` : ''}</button>`;
+          }).join('')}</div></div>`,
+        acts: trays(pick.map((_, i) => i + 1), nTrays().map(i => pick[i - 1] ? 'Bàn ' + short(pick[i - 1]) : 'trống'))
+          + act('primary', pick.length ? `Đi giao ${pick.length} bàn` : 'Chọn bàn để giao', pick.length ? 'Go deliver' : 'Pick tables', 'dispatch', pick.length ? '' : 'disabled')
+          + act('outline', 'Bỏ chọn', 'Clear', 'unpick', pick.length ? '' : 'disabled')
+          + act('outline', 'Về trạm sạc', 'Dock', 'release') + (toDish || '') };
     }
   }
   if (r.phase === 'toStop' && m) {
-    const s = m.stops[m.cur];
-    const what = { load: 'Tới lấy đồ', handoff: 'Đang giao món', collect: 'Tới thu dọn', unload: 'Mang chén đĩa', return: 'Mang đồ bị huỷ về', standby: 'Đang tới' }[s.a];
+    const s = m.stops[m.cur], place = pname(s.p);
+    const [what, en] = { load: ['Tới lấy đồ', 'Going to pick up'], handoff: ['Đang giao', 'On the way'], collect: ['Tới thu dọn', 'Going to collect'],
+      unload: ['Mang chén đĩa', 'Taking dishes'], return: ['Mang đồ về', 'Bringing items back'], standby: ['Đang tới', 'Heading to'] }[s.a];
     const nav = { yield: `Đang nhường lối hẹp${r.why ? ' cho ' + r.why : ''}`, queue: 'Đang chờ tới lượt', wait: 'Chờ robot phía trước' }[r.nav];
-    return { bar: `${what} → ${pname(s.p)}`, tone: 'go', body: `${face(nav ? 'wait' : 'go', !nav)}<p class="sub">${esc(m.label)}</p>
-      <p class="dest">${esc(pname(s.p))}</p>${nav ? `<p class="sub">⏳ ${nav}</p>` : ''}<p class="sub" id="timer"></p>
-      ${m.kind === 'deliver' && m.loaded ? trayList(m, x => x.a === 'handoff') : ''}<p class="sub">Robot đang di chuyển — xin quý khách nhường lối.</p>` };
+    return { bar: `${what} → ${place}`, sub: en, tone: lowBat(r) ? 'warn' : 'go',
+      body: `<div class="moving"><div class="mv"><div class="mvhead">${face(nav ? 'wait' : 'go', !nav)}<div><p class="eyebrow">${what} · ${en}</p><p>${esc(m.label)}</p></div></div>
+        <p class="dest" style="--n:${Math.max(3, place.length)}">${esc(place)}</p><p id="timer"></p>
+        <div class="yield">Xin quý khách nhường lối · Please make way</div>${batChip(r)}</div>
+        <div class="card route"><h3>Lộ trình · Route</h3>${routeList(m)}${nav ? `<p class="nav">${nav}</p>` : ''}</div></div>`,
+      acts: info('Đang di chuyển', 'Robot tự dừng khi có người hoặc vật cản · Stops for people and obstacles')
+        + act('outline', 'Tạm dừng', 'Pause', 'pause')
+        // Orchestrator ignores cancel on a loaded bus trip and never drops return/unload stops (station.html locks these too).
+        + (m.kind === 'bus' && m.loaded || ['return', 'unload'].includes(s.a) ? ''
+          : armAct('cmv', 'danger', ['Huỷ chuyến', 'Cancel trip'], ['Chạm lần nữa để huỷ', 'Tap again to cancel'], 'cancel')) };
   }
-  if (r.phase === 'toDock') return { bar: 'Hoàn tất · Về trạm sạc', tone: 'ok', body: `${face('happy', true)}<h1>Về trạm sạc</h1><p class="sub">Robot sẵn sàng nhận nhiệm vụ mới trên đường về.</p>` };
-  return { bar: `Robot ${ID} · ${pname(r.at || r.dock)}`, tone: r.charging ? 'warn' : 'ok', body: `${face(r.charging ? 'sleep' : 'happy')}
-    <h1>${r.charging ? 'Đang sạc' : 'Sẵn sàng phục vụ'}</h1>
-    <div class="meter"><div style="width:${Math.round(r.battery)}%"></div></div>
-    <p class="sub">${r.charging ? 'Pin yếu — robot tạm ngừng nhận nhiệm vụ đến khi sạc đủ.' : 'Chờ nhiệm vụ từ các trạm.'}</p>` };
+  const b = Math.round(r.battery), home = r.phase === 'toDock', dock = pname(home ? cfg().dock : r.at || cfg().dock), full = App.site.timing.chargedBattery;
+  if (r.charging) return { bar: `Robot ${ID} · ${dock}`, sub: 'Battery low · Charging', tone: 'warn',
+    body: split(face('sleep', home), `Pin ${b}% · Battery ${b}%`, 'Tôi cần đi sạc.', 'I need to recharge.',
+      `<p class="lead">Robot ${home ? 'đang về' : 'đang ở'} ${esc(dock)}. Việc mới sẽ chuyển cho robot khác tới khi pin đạt ${full}%.</p>`),
+    acts: info(`Pin ${b}% · Battery ${b}%`, `Pin đủ ${full}% thì nhận việc lại · Back to work at ${full}%`) };
+  if (home) return { bar: 'Hoàn tất · Về trạm sạc', sub: 'Done · Heading to dock', tone: 'ok',
+    body: split(face('happy', true), 'Hoàn tất · Done', 'Về trạm sạc.', 'Heading back to the charger.', '<p class="lead">Robot sẵn sàng nhận nhiệm vụ mới trên đường về.</p>'),
+    acts: info('Về trạm sạc', 'Sẵn sàng nhận nhiệm vụ mới trên đường về · Ready for new tasks on the way') };
+  const free = App.site.trays;
+  return { bar: `Robot ${ID} · ${dock}`, sub: 'Ready', tone: 'ok',
+    body: split(face('happy'), `MEKONIQ Serve · ${esc(ID)}`, 'Xin chào!', 'Hello!',
+      `<div class="chips"><span class="pill">${free} khay trống · ${free} trays free</span><span class="pill ok">Sẵn sàng · Ready</span></div><p class="lead">Chờ nhiệm vụ từ các trạm.</p>`, 'hello'),
+    acts: act('dark', 'Nhân viên', 'Staff', 'staff') };
 }
 
 let r = null, m = null;
@@ -175,26 +338,34 @@ function render() {
   if (!(r && r.phase === 'atStop' && m && m.stops[m.cur].a === 'standby')) pick = [];
   const v = view(r, m);
   document.body.className = 't-' + v.tone;
-  $('ttl').textContent = v.bar;
-  setHTML($('view'), v.body);
+  $('bar').textContent = v.bar;
+  $('sub').textContent = v.sub;
+  setHTML($('body'), v.body);
+  setHTML($('acts'), v.acts);
   $('estop').hidden = !r || r.halt === 'estop';
-  if (r) $('bat').textContent = `🔋 ${Math.round(r.battery)}%${r.charging ? ' ⚡' : ''}`;
+  $('bat').hidden = !r;
+  if (r) {
+    $('bat').classList.toggle('low', lowBat(r));
+    $('bat').firstChild.style.setProperty('--b', Math.round(r.battery) + '%');
+    $('bat').lastChild.textContent = Math.round(r.battery) + '%';
+  }
   tick();
 }
 // Time-varying text lives outside the HTML diff so buttons are not re-created every second.
 function tick() {
   const t = $('timer');
   if (!t || !r) return;
-  if (r.phase === 'toStop') t.textContent = `Còn khoảng ${etaSec(r)} giây`;
-  if (r.phase === 'atStop') t.textContent = `Robot tự quay về sau ${Math.max(0, App.site.timing.handoffSec - Math.round((serverNow() - r.waitSince) / 1000))} giây.`;
+  if (r.phase === 'toStop') t.textContent = isValetudo() ? '' : `Còn khoảng ${etaSec(r)} giây · ~${etaSec(r)} s`;   // Valetudo reports no remaining route
+  if (r.phase === 'atStop') { const n = Math.max(0, App.site.timing.handoffSec - Math.round((serverNow() - r.waitSince) / 1000)); t.textContent = `Robot tự quay về sau ${n} giây · Returns in ${n} s`; }
 }
 
-$('view').addEventListener('click', e => {
+$('main').addEventListener('click', e => {
   const t = e.target.closest('[data-t]');
   if (t) {
     const id = t.dataset.t;
     if (pick.includes(id)) pick = pick.filter(x => x !== id);
     else if (pick.length < App.site.trays) pick.push(id);
+    else toast(`Robot chỉ có ${App.site.trays} khay · ${App.site.trays} trays only`, 'warn');
     return render();
   }
   const b = e.target.closest('[data-act]');
@@ -205,15 +376,19 @@ $('view').addEventListener('click', e => {
     send({ type: 'confirm', ...base, by: s.a === 'handoff' ? 'Khách ' + pname(s.p) : BY, mission: m.id, stop: m.cur });
   }
   if (a === 'cancelStop') armed('cx', () => send({ type: 'cancelStop', mission: m.id, stop: m.cur, why: 'customer', by: 'Khách ' + pname(m.stops[m.cur].p) }), render);
-  if (a === 'cancel') armed('cm', () => send({ type: 'cancel', mission: m.id, by: BY }), render);
+  if (a === 'cancel') armed(b.dataset.arm, () => send({ type: 'cancel', mission: m.id, by: BY }), render);
   if (a === 'resume') {
     if (r.halt === 'estop') armed('rs', () => send({ type: 'resume', ...base, atRobot: true }), render);
     else send({ type: 'resume', ...base });
   }
+  if (a === 'pause') { send({ type: 'pause', ...base }); toast('Đã tạm dừng · Paused'); }
+  if (a === 'manual') armed('man', () => send({ type: 'manual', ...base }), render);
   if (a === 'clear') send({ type: 'clear', ...base });
   if (a === 'dispatch') { send({ type: 'dispatch', ...base, mission: m.id, tables: pick }); pick = []; }
+  if (a === 'unpick') { pick = []; render(); }
   if (a === 'toDish') send({ type: 'dispatch', ...base, mission: m.id, toDish: true });
   if (a === 'release') send({ type: 'dispatch', ...base, mission: m.id, release: true });
+  if (a === 'staff') toast('Gọi robot từ máy trạm · Call the robot from a station');
 });
 
 connect(msg => {

@@ -18,14 +18,16 @@ const Transport = (() => {
   }
 
   async function lead() {
-    const route = await load('lib/route.js');
-    const [O, S, site] = await Promise.all([load('lib/orchestrator.js', { './route': route }), load('lib/simulator.js', { './route': route }),
+    const route = await load('lib/route.js'), siteLib = await load('lib/site.js');
+    const [O, S, seed] = await Promise.all([load('lib/orchestrator.js', { './route': route, './site': siteLib }), load('lib/simulator.js', { './route': route }),
       fetch('site.json').then(r => r.json())]);
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+    // seed = factory default (siteReset target); site = what setup.html saved, like global.site || seed on Node-RED.
+    let site = (saved && saved.site) || seed;
     const st = (saved && saved.st) || O.init(site, Date.now());
     const sim = (saved && saved.sim) || S.init(site);
-    const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ st, sim })); } catch (e) {} };
+    const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ st, sim, site })); } catch (e) {} };
 
     const deliver = ui => {
       for (const u of ui) {
@@ -35,13 +37,14 @@ const Transport = (() => {
     };
     const run = inp => {
       const r = O.handle(st, site, inp, Date.now());
+      if (r.site) { site = r.site; save(); }   // config saved from setup.html
       deliver(r.ui);
       for (const cmd of r.cmds) for (const e of S.handle(sim, site, cmd, Date.now())) run({ source: 'adapter', data: e });
     };
     input = (text, session) => {
       let data;
       try { data = JSON.parse(text); } catch (e) { return; }
-      run({ source: 'ui', data, session });
+      run({ source: 'ui', data, session, seed });
     };
     setInterval(() => { for (const e of S.handle(sim, site, { cmd: 'tick' }, Date.now())) run({ source: 'adapter', data: e }); }, 500);
     setInterval(save, 2000);

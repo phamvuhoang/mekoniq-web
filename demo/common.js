@@ -1,5 +1,7 @@
 // Shared by station / robot / table pages: messaging (via transport.js), MP3 cues, labels, small UI helpers.
 const App = { site: null, state: null, map: null, skew: 0 };
+// ?orient=portrait forces the portrait layout (screenshot aid); CSS mirrors the orientation media query under :root[data-orient=portrait].
+if (new URLSearchParams(location.search).get('orient') === 'portrait') document.documentElement.dataset.orient = 'portrait';
 
 function connect(onMsg) {
   const off = document.getElementById('offline'), dot = document.getElementById('conn');
@@ -42,7 +44,9 @@ const clock = t => new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', mi
 const ACTION_VI = { load: 'Xếp đồ lên khay', handoff: 'Giao cho khách', collect: 'Thu chén đĩa', unload: 'Dỡ chén đĩa', return: 'Trả đồ bị huỷ', standby: 'Chờ lệnh' };
 
 function missionOf(r) { return r && r.mission ? App.state.missions.find(m => m.id === r.mission) : null; }
-const etaSec = r => Math.round((r.rem || 0) / App.site.sim.speed);   // remaining route length, not straight line
+const etaSec = r => Math.round((r.rem || 0) / ((App.site.sim || {}).speed || 1));   // remaining route length, not straight line
+// Simulator robots drive on the hand-drawn floor plan (web demo); a Valetudo-only site shows the robot's own map instead.
+const hasSim = () => !!App.site && App.site.robots.some(r => !r.driver || r.driver === 'sim');
 // [text, tone] for a robot's current status.
 function robotStatus(r) {
   if (r.offline) return ['Mất kết nối', 'danger'];
@@ -72,14 +76,43 @@ const isArmed = key => armedKey === key;
 // Only touch the DOM when content changed, so clicks are not swallowed by re-renders.
 function setHTML(el, html) { if (el.__html !== html) { el.__html = html; el.innerHTML = html; } }
 
+// One pill at a time: a new toast replaces the previous one.
 function toast(text, level = 'info') {
   let box = document.querySelector('.toasts');
   if (!box) { box = document.createElement('div'); box.className = 'toasts'; box.setAttribute('aria-live', 'polite'); document.body.append(box); }
   const t = document.createElement('div');
   t.className = 'toast ' + level; t.textContent = text;
-  box.prepend(t);
-  setTimeout(() => t.remove(), 6000);
-  while (box.children.length > 4) box.lastChild.remove();
+  box.replaceChildren(t);
+  setTimeout(() => t.remove(), 2400);
+}
+
+// Bilingual label, VI line + EN line. Arguments are trusted markup: esc() anything dynamic.
+const L = (vi, en) => `<b>${vi}</b><small>${en}</small>`;
+const TONE = { ok: '#b9fb75', go: '#63dcc5', warn: '#ff9f68', danger: '#d93d42' };
+
+// Dark app bar for tablet pages. Returns a string; the caller wires clicks on [data-tab].
+// tabs = [{id, label, on}]; right = raw HTML (links, buttons). Ends with the clock and connection dot.
+function APPBAR({ title, sub, tabs = [], right = '', home = 'index.html' } = {}) {
+  return `<header class="appbar"><a class="home" href="${esc(home)}"><img src="logo.svg" alt="MEKONIQ"></a>
+    <div class="title"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>
+    ${tabs.length ? `<div class="seg dark">${tabs.map(t => `<button data-tab="${esc(t.id)}" aria-pressed="${!!t.on}">${esc(t.label)}</button>`).join('')}</div>` : ''}
+    <div class="right">${right}</div><span id="clock"></span><span class="dot" id="conn"></span></header>`;
+}
+function startClock() {
+  const tick = () => { const c = document.getElementById('clock'); if (c) c.textContent = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); };
+  tick(); setInterval(tick, 1000);
+}
+// Alert strip rows (one per alert). extra(a) may return more button HTML placed before "Đã biết".
+function strip(alerts, extra) {
+  return (alerts || []).map(a => `<div class="strip${a.level === 'error' ? ' error' : ''}"><span class="kind">${a.level === 'error' ? 'Lỗi' : 'Cảnh báo'}</span><span class="grow">${esc(a.text)}</span><span class="t">${clock(a.t)}</span>${extra ? extra(a) : ''}<button class="btn sm dark" data-act="ack" data-id="${esc(a.id)}">Đã biết</button></div>`).join('');
+}
+// What a table tile shows: robot standing there, robot on its way, queued, or free.
+function tableState(t) {
+  const r = App.state.robots.find(x => x.phase === 'atStop' && x.at === t);
+  if (r) return [r.id + ' đang ở bàn', 'here'];
+  for (const m of App.state.missions) for (const s of m.stops)
+    if (s.p === t && (s.status === 'pending' || s.status === 'active')) return [s.status === 'active' && m.robot ? m.robot + ' đang tới' : m.status !== 'active' ? 'Trong hàng chờ' : m.loaded ? 'Sắp tới lượt' : 'Đang chuẩn bị', 'busy'];
+  return ['Sẵn sàng', ''];
 }
 
 const BRAND = sub => `<a class="identity" href="index.html"><img src="logo.svg" alt="">
@@ -89,10 +122,10 @@ const BRAND = sub => `<a class="identity" href="index.html"><img src="logo.svg" 
 // Tables/zones are drawn where they are; the route network shows where robots may drive.
 function floorSVG(click) {
   const S = App.site, P = S.points;
-  let h = `<rect x="0" y="0" width="${S.floor.w}" height="${S.floor.h}" rx=".4" fill="none" stroke="var(--line)" stroke-width=".1"/>`;
+  let h = `<rect x="0" y="0" width="${S.floor.w}" height="${S.floor.h}" rx=".4" fill="var(--light)" stroke="var(--line)" stroke-width=".1"/>`;
   for (const [id, p] of Object.entries(P)) {
     const f = a => (click ? ` data-f="${a}"` : '');
-    if (p.kind === 'table') h += `<g${f('t:' + id)}><rect class="tbl" id="pt-${id}" x="${p.x - .9}" y="${p.y - .65}" width="1.8" height="1.3" rx=".25"/><text x="${p.x}" y="${p.y}">${short(id)}</text></g>`;
+    if (p.kind === 'table') h += `<g${f('t:' + id)}><rect class="tbl" id="pt-${id}" x="${p.x - .9}" y="${p.y - .65}" width="1.8" height="1.3" rx=".25"/><text x="${p.x}" y="${p.y}">${esc(short(id))}</text></g>`;
     else if (p.kind === 'dock') h += `<rect class="zone dock" x="${p.x - .6}" y="${p.y - .5}" width="1.2" height="1" rx=".2"/><text class="zl" x="${p.x}" y="${p.y - .1}">⚡${esc(p.name.replace(/\D/g, ''))}</text>`;
     else h += `<g${f((p.kind === 'station' ? 'from:' : 'to:') + id)}><rect class="zone ${p.kind}" x="${p.x - 2.4}" y="${p.y - 1.6}" width="4.8" height="3.2" rx=".4"/><text x="${p.x - .4}" y="${p.y}">${esc(p.name)}</text></g>`;
   }
@@ -114,9 +147,10 @@ function netSVG(map, o = {}) {
     h += `<circle class="node${P[id] ? ' stop' : ''}${o.node === id ? ' sel' : ''}${o.from === id ? ' from' : ''}" ${o.edit ? `data-node="${id}"` : ''} cx="${n.x}" cy="${n.y}" r="${o.edit ? (P[id] ? .24 : .2) : P[id] ? .12 : .07}"/>`;
   return h;
 }
-const obstacleSVG = obs => obs.map(o => `<g class="ob ${o.kind}" data-ob="${o.id}" transform="translate(${o.x} ${o.y})"><circle r=".32"/><text>${o.kind === 'person' ? '🚶' : '🪑'}</text></g>`).join('');
-const LEGEND = `<div class="legend">${[['', 'Lối đi'], ['narrow', 'Lối hẹp · 1 robot'], ['slow', 'Đi chậm'], ['closed', 'Đã đóng']]
-  .map(([c, t]) => `<span><svg viewBox="0 0 2 .4"><line class="lane ${c}" x1=".1" y1=".2" x2="1.9" y2=".2"/></svg>${t}</span>`).join('')}
+// Obstacle disc: N = người (person, passes by), G = ghế/vật (object, stays until removed).
+const obstacleSVG = obs => obs.map(o => `<g class="ob ${o.kind}" data-ob="${o.id}" transform="translate(${o.x} ${o.y})"><circle r=".4"/><text>${o.kind === 'person' ? 'N' : 'G'}</text></g>`).join('');
+const laneKey = ([c, t]) => `<span><svg viewBox="0 0 2 .4"><line class="lane ${c}" x1=".1" y1=".2" x2="1.9" y2=".2"/></svg>${t}</span>`;
+const LEGEND = `<div class="legend">${[['', 'Lối đi'], ['narrow', 'Lối hẹp · 1 robot'], ['slow', 'Đi chậm'], ['closed', 'Đã đóng']].map(laneKey).join('')}
   <span><svg viewBox="0 0 2 .4"><line class="lane" x1=".1" y1=".2" x2="1.9" y2=".2"/><path class="arrow" d="M-.2,-.17 L.2,0 L-.2,.17 Z" transform="translate(1 .2)"/></svg>Một chiều</span>
   <span><svg viewBox="0 0 2 .4"><line class="path" x1=".1" y1=".2" x2="1.9" y2=".2"/></svg>Lộ trình robot</span></div>`;
 // Screen click -> floor coordinates (metres).

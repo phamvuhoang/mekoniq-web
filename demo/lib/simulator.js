@@ -20,8 +20,10 @@ const LANE = { object: 0.5, person: 0.5, robot: 0.35 };   // lateral distance th
 
 function init(site) {
   const sim = { ver: 2, last: 0, robots: {}, map: site.map, mapV: 0, obstacles: [], obSeq: 0, locks: {} };
-  for (const { id, dock } of site.robots) {
-    const p = site.map.nodes[dock];
+  for (const { id, dock, driver } of site.robots) {
+    if (driver && driver !== 'sim') continue;   // driven by another adapter (lib/valetudo.js)
+    const p = site.map && site.map.nodes[dock];
+    if (!p) continue;   // dock not on the route network (Valetudo-only site)
     sim.robots[id] = { x: p.x, y: p.y, dock, battery: 100, goal: null, path: [], prev: dock, nav: 'idle', why: null,
       waitSince: 0, avoid: [], stopped: false, offline: false, mv: false };
   }
@@ -151,7 +153,9 @@ function drive(sim, site, id, b, dt, events) {
 
 // input: {cmd:'tick'} | orchestrator cmd. Returns adapter events.
 function handle(sim, site, input, now) {
-  if (sim.ver !== 2) Object.assign(sim, init(site));   // state saved by an older version
+  // state saved by an older version, or before robots were added / moved to another driver
+  const ids = site.robots.filter(r => !r.driver || r.driver === 'sim').map(r => r.id).join();
+  if (sim.ver !== 2 || Object.keys(sim.robots).join() !== ids) Object.assign(sim, init(site));
   const b = sim.robots[input.robot];
   switch (input.cmd) {
     case 'goto':

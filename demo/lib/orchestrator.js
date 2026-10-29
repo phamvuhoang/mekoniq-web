@@ -17,6 +17,7 @@ const STATUS_VI = { done: 'hoàn thành', cancelled: 'đã huỷ', failed: 'chuy
 const ARRIVE_SOUND = { load: 'load', handoff: 'arrived', collect: 'collect', unload: 'unload', return: 'unload', standby: 'standby' };
 const SIM_FAULTS = ['block', 'clear', 'offline', 'online', 'lowbat'];
 const R = require('./route');
+const Site = require('./site');
 const WHY_VI = { object: 'vật cản', person: 'người đi qua', robot: 'robot khác' };
 
 let lastSnap = '';
@@ -29,15 +30,17 @@ function init(site, now) {
 }
 
 // Adds robots that appear in site.json after state was persisted.
+// Also drops robots removed from site.json (setup.html) once they have no mission.
 function sync(st, site, now) {
-  if (!st.map) { st.map = { v: 1, ...JSON.parse(JSON.stringify(site.map)) }; st.obstacles = []; }
+  if (!st.map) { st.map = { v: 1, nodes: {}, edges: [], ...JSON.parse(JSON.stringify(site.map || {})) }; st.obstacles = []; }
   for (const { id, dock } of site.robots) {
-    if (st.robots[id]) continue;
-    const p = site.points[dock];
-    st.robots[id] = { id, dock, x: p.x, y: p.y, battery: 100, phase: 'idle', at: dock, target: null, token: 0,
+    if (st.robots[id]) { st.robots[id].dock = dock; continue; }
+    const p = site.points[dock] || {};
+    st.robots[id] = { id, dock, x: p.x || 0, y: p.y || 0, battery: 100, phase: 'idle', at: dock, target: null, token: 0,
       mission: null, halt: null, offline: false, charging: false, lastSeen: now, waitSince: 0, lastRemind: 0, waitAlerted: false,
-      nav: 'idle', why: null, path: [], rem: 0 };
+      nav: 'idle', why: null, path: [], rem: 0, pos: null };
   }
+  for (const id of Object.keys(st.robots)) if (!st.robots[id].mission && !site.robots.some(r => r.id === id)) delete st.robots[id];
 }
 
 const open = s => s.status === 'pending' || s.status === 'active';
@@ -69,8 +72,22 @@ function goTo(c, r, point, phase) {
   gotoCmd(c, r);
 }
 function gotoCmd(c, r) {
-  const p = c.st.map.nodes[r.target];
-  c.cmds.push({ cmd: 'goto', robot: r.id, to: r.target, x: p.x, y: p.y, token: r.token });
+  const p = c.st.map.nodes[r.target] || c.site.points[r.target] || {};   // Valetudo-only points have no route node
+  c.cmds.push({ cmd: 'goto', robot: r.id, to: r.target, x: p.x || 0, y: p.y || 0, token: r.token });
+}
+
+// How far a free robot is from a mission's first stop. Simulator robots: along the route network.
+// Valetudo robots: straight line in robot cm on their own map; a robot never taught one of the stops comes last —
+// it still takes the job when no taught robot is free, and the adapter then reports noroute (an alert), never a silent wait.
+function distanceTo(c, r, m) {
+  const cfg = c.site.robots.find(x => x.id === r.id) || {};
+  const first = m.stops.find(open).p;
+  if (cfg.driver === 'valetudo') {
+    const P = (cfg.valetudo && cfg.valetudo.points) || {};
+    if (!m.stops.filter(open).every(s => P[s.p] || s.p === r.dock)) return 1e9;
+    return r.pos && P[first] ? Math.hypot(r.pos.x - P[first].x, r.pos.y - P[first].y) : 0;
+  }
+  return c.st.map.nodes[first] ? Math.min(R.distance(c.st.map, r.x, r.y, first), 1e9) : 0;   // closed lanes: still assign, the robot reports noroute
 }
 
 // Moves a mission to its next open stop, or finishes it.
@@ -97,20 +114,18 @@ function finish(c, m, status) {
   log(c, m.status === 'done' ? 'ok' : 'warn', `${m.label}: ${STATUS_VI[m.status]}`, m.robot);
   const r = c.st.robots[m.robot];
   if (r && r.mission === m.id) {
-    r.mission = null;
+    r.mission = null; r.homeDue = true;   // heads home after assign(): a queued mission takes it straight on, no detour via the dock
     resolve(c, 'wait-' + r.id);
-    goTo(c, r, r.dock, 'toDock');   // assign() may still hand it a new mission on the way
   }
 }
 
 function assign(c) {
   const queue = c.st.missions.filter(m => m.status === 'queued').sort((a, b) => (b.urgent - a.urgent) || (a.createdAt - b.createdAt));
   for (const m of queue) {
-    const first = m.stops.find(open).p;
     const free = Object.values(c.st.robots).filter(r => !r.mission && !r.halt && !r.offline && !r.charging &&
       (m.robotPref === 'any' || m.robotPref === r.id));
     if (!free.length) continue;
-    const far = r => R.distance(c.st.map, r.x, r.y, first);   // along the aisles, not as the crow flies
+    const far = r => distanceTo(c, r, m);
     const r = free.reduce((a, b) => (far(a) <= far(b) ? a : b));
     m.status = 'active'; m.robot = r.id; m.startedAt = c.now; r.mission = m.id;
     log(c, 'info', `${r.id} nhận ${m.label}`, r.id);
@@ -229,7 +244,7 @@ function telemetry(c, d) {
   for (const t of list) {
     const r = st.robots[t.id];
     if (!r) continue;
-    r.x = t.x; r.y = t.y; r.battery = t.battery; r.lastSeen = now;
+    r.x = t.x; r.y = t.y; r.battery = t.battery; r.lastSeen = now; r.pos = t.pos || null;
     r.path = Array.isArray(t.path) ? t.path : []; r.rem = t.rem || 0;
     if (t.nav !== r.nav) navChanged(c, r, t);
     r.nav = t.nav || 'idle'; r.why = t.why || null;
@@ -304,7 +319,26 @@ function timers(c) {
   }
 }
 
-function fromUI(c, d, session) {
+// Config edits: validated by lib/site.js, refused while a removed point / robot still has a mission.
+function saveSite(c, d, session, seed, by) {
+  const fail = t => c.ui.push({ session, payload: JSON.stringify({ type: 'event', t: c.now, text: 'Không lưu: ' + t }) });
+  if (!seed) return fail('thiếu dữ liệu mặc định');
+  const reset = d.type === 'siteReset';
+  if (!reset && (!d.site || Number(d.site.rev) !== (c.site.rev || 0))) return fail('máy khác vừa lưu cấu hình — tải lại trang');
+  const { site, errors } = Site.normalize(reset ? seed : d.site, seed);
+  if (errors.length) return fail(errors.join('; '));
+  const used = Site.inUse(c.site, c.st);
+  const gone = [...used.points].filter(p => !site.points[p]).map(p => pname(c, p)).concat([...used.robots].filter(id => !site.robots.some(r => r.id === id)));
+  if (gone.length) return fail(gone.join(', ') + ' đang có lệnh');
+  site.rev = (c.site.rev || 0) + 1;
+  c.site = c.newSite = site;
+  sync(c.st, site, c.now);
+  log(c, 'info', `${by} ${reset ? 'khôi phục cấu hình mặc định' : 'cập nhật cấu hình'} (bản ${site.rev})`);
+  c.ui.push({ payload: JSON.stringify({ type: 'site', site }) });
+  c.force = true;
+}
+
+function fromUI(c, d, session, seed) {
   const { st } = c;
   const by = String(d.by || 'Không rõ').slice(0, 40);
   const r = st.robots[d.robot];
@@ -376,6 +410,13 @@ function fromUI(c, d, session) {
       return finish(c, mm, 'failed');
     }
     case 'ack': st.alerts = st.alerts.filter(a => a.id !== d.alert); return;
+    case 'siteSave': case 'siteReset': return saveSite(c, d, session, seed, by);
+    case 'probe':   // setup.html: drive an idle robot to a spot to check a taught point
+      if (r && !r.mission && r.phase === 'idle' && !r.halt && !r.offline && isFinite(d.x) && isFinite(d.y)) {
+        c.cmds.push({ cmd: 'probe', robot: r.id, x: Math.round(+d.x), y: Math.round(+d.y) });
+        log(c, 'info', `${by} cho ${r.id} chạy thử tới (${Math.round(+d.x)}, ${Math.round(+d.y)})`, r.id);
+      }
+      return;
     case 'sim': if (r && SIM_FAULTS.includes(d.fault)) c.cmds.push({ cmd: 'sim', robot: r.id, fault: d.fault }); return;
     case 'reset':
       for (const k of Object.keys(st)) delete st[k];
@@ -389,14 +430,14 @@ function fromUI(c, d, session) {
 
 function snapshot(st) {
   return {
-    robots: Object.values(st.robots).map(({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince, nav, why, path, rem }) =>
-      ({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince, nav, why, path, rem })),
+    robots: Object.values(st.robots).map(({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince, nav, why, path, rem, pos }) =>
+      ({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince, nav, why, path, rem, pos: pos || null })),
     missions: st.missions, history: st.history.slice(0, 15), log: st.log.slice(0, 40), alerts: st.alerts, kpi: st.kpi,
     obstacles: st.obstacles, mapV: st.map.v
   };
 }
 
-// input: {source:'ui', data, session} | {source:'adapter', data}
+// input: {source:'ui', data, session, seed?} | {source:'adapter', data}. Returns {ui, cmds, site?} — site only when the config changed.
 function handle(st, site, input, now) {
   const c = { st, site, now, ui: [], cmds: [], force: false };
   sync(st, site, now);
@@ -406,15 +447,17 @@ function handle(st, site, input, now) {
       if (d.event === 'telemetry') { telemetry(c, d); timers(c); }
       else if (d.event === 'arrived' && st.robots[d.robot]) arrived(c, st.robots[d.robot], d.token);
       else if (d.event === 'reroute' && st.robots[d.robot]) reroute(c, st.robots[d.robot], d.why);
-    } else fromUI(c, d, input.session);
+      else if (d.event === 'log' && st.robots[d.robot]) log(c, 'info', String(d.text).slice(0, 160), d.robot);
+    } else fromUI(c, d, input.session, input.seed);
   }
   assign(c);
+  for (const r of Object.values(st.robots)) if (r.homeDue) { r.homeDue = false; if (!r.mission) goTo(c, r, r.dock, 'toDock'); }
   const snap = JSON.stringify(snapshot(st));
   if (c.force || snap !== lastSnap) {
     lastSnap = snap;
     c.ui.push({ payload: `{"type":"state","now":${now},${snap.slice(1)}` });
   }
-  return { ui: c.ui, cmds: c.cmds };
+  return c.newSite ? { ui: c.ui, cmds: c.cmds, site: c.newSite } : { ui: c.ui, cmds: c.cmds };
 }
 
 function arrived(c, r, token) {

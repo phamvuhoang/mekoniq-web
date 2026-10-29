@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="vi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MEKONIQ Serve · Cấu hình</title>
+<link rel="icon" href="logo.svg"><link rel="stylesheet" href="brand.css">
+<style>
+  /* Manager's config page (spec 4.5): every operational setting, saved live to the orchestrator (no site.json editing).
+     Tabs in the app bar; each tab fits one screen, long lists scroll inside their card. */
+  .appbar .title { flex: none; }
+  .appbar .seg.dark button { padding: 8px 14px; }
+  .appbar .btn { min-height: 40px; padding: 8px 14px; border-color: #3c5f5c; color: var(--card); }
+  .appbar .btn.primary { border-color: var(--mint); color: var(--deep); }
+  .appbar .btn:disabled { opacity: .4; }
+  .appbar .pill { color: var(--deep); }
+  .strip .grow { white-space: pre-wrap; }
+
+  .screen > .body { grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+  .tab { display: grid; gap: 12px; min-height: 0; min-width: 0; overflow: auto; }
+  .card { min-height: 0; }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  .id { font: 500 12px var(--mono); color: var(--muted); }
+  input[type=number], select { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 8px 10px; min-height: 40px; }
+  input[type=number] { width: 84px; }
+  .seg.sm button { min-height: 38px; padding: 6px 12px; font-size: 13px; }
+  .lbl { font-size: 12px; font-weight: 800; color: var(--muted); }
+
+  /* Stepper with a typeable value: tapping the number edits it directly. */
+  .stepper { flex: none; }
+  .stepper input { width: 58px; min-height: 0; border: 0; padding: 0; background: transparent; text-align: right; font: 500 20px var(--mono); -moz-appearance: textfield; }
+  .stepper input::-webkit-inner-spin-button, .stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .stepper .u { width: 22px; padding-left: 3px; font: 500 14px var(--mono); color: var(--muted); }
+
+  /* Điểm & bản đồ: map card | 400px point list */
+  #tab-points { grid-template: minmax(0, 1fr) / minmax(0, 1fr) 400px; overflow: hidden; }
+  .maphead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .maphead .eyebrow { margin: 0; flex: 1; min-width: 0; }
+  .mapbox { position: relative; flex: 1; min-height: 0; border-radius: 12px; overflow: hidden; background: var(--light); }
+  .mapbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
+  .mapbox .warnmap { position: absolute; left: 10px; top: 10px; right: 10px; background: var(--accent); color: var(--alert-ink); border-radius: 10px; padding: 8px 12px; font-weight: 800; font-size: 13px; }
+  .selrow { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-height: 52px; }
+  .selrow .who { flex: 1; min-width: 160px; }
+  .selrow .who b { display: block; font-size: 17px; font-weight: 900; line-height: 1.2; }
+  .selrow .ptpos { display: contents; }
+  .arrows { display: flex; gap: 4px; }
+  .arrows .btn.sm { width: 44px; min-height: 44px; padding: 0; font-size: 18px; }
+  #mapHint { margin: 0; font-size: 13px; }
+  #delPoint { margin-left: auto; }
+  #delPoint:not(.armed) { border-color: var(--danger); color: var(--danger); }
+  .list { flex: 1; min-height: 0; overflow: auto; margin: 0 -6px; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; align-content: start; }
+  .list > p { grid-column: 1 / -1; }
+  .row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; gap: 8px; align-items: center; padding: 6px; border-radius: 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .row.sel { background: var(--pill-ok); }
+  .row.sel .pill.ok { background: var(--card); }
+  .row .k { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .row input[type=text] { padding: 7px 10px; }
+  .foot { flex: none; display: flex; gap: 8px; }
+
+  /* Robot: three robot cards | 300px battery column. More robots: the card area scrolls. */
+  #tab-robots { grid-template: minmax(0, 1fr) / minmax(0, 1fr) 300px; overflow: hidden; }
+  #robots { display: grid; gap: 12px; grid-template: minmax(0, 1fr) / repeat(3, minmax(0, 1fr)); min-height: 0; }
+  #robots.many { grid-template: none / repeat(auto-fill, minmax(280px, 1fr)); grid-auto-rows: max-content; overflow: auto; }
+  .rcard { overflow: auto; }
+  .rhead { display: flex; align-items: center; gap: 10px; }
+  .rhead .av { width: 40px; height: 40px; border-radius: 50%; background: var(--deep); color: var(--mint); display: grid; place-items: center; font-weight: 900; font-size: 14px; flex: none; }
+  .rhead b { flex: 1; font-size: 17px; font-weight: 900; }
+  .f { display: grid; gap: 4px; }
+  .f .seg button { flex: 1; }
+  .f small { color: var(--muted); font-size: 12px; }
+  details.adv summary { cursor: pointer; font-weight: 800; font-size: 13px; padding: 6px 0; }
+  .knob { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+  .knob .id { color: var(--ink); }
+  .knob small { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; }
+  .knob input[type=text] { grid-column: 1 / -1; }
+  .rcard .del { margin-top: auto; align-self: flex-start; }
+  .bat { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .bat > div:first-child { flex: 1 1 140px; }
+  .bat .stepper { margin-left: auto; }
+  .bat small { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; }
+  #addRobot { border-style: dashed; border-width: 2px; min-height: 56px; }
+
+  /* Vai trò & thời gian */
+  #tab-roles { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; align-content: start; }
+  .role { border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: grid; gap: 8px; }
+  .role .rh { display: flex; align-items: center; gap: 10px; }
+  .role .rr { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+  .role .rr label { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .trow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .trow:first-of-type { border-top: 0; }
+  .trow b { display: block; font-size: 15px; }
+  .trow small { display: block; color: var(--muted); font-size: 12px; }
+
+  /* Sao lưu: one centred card */
+  #tab-backup { place-content: center; }
+  .backup { width: min(640px, 100%); display: grid; gap: 14px; padding: 24px; }
+  .backup h2 { margin: 0; font-size: 26px; font-weight: 900; }
+  .backup p { margin: 0; }
+  .backup .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .backup .act { cursor: pointer; }
+  #reset { justify-self: start; }
+
+  @media (orientation: portrait), (max-width: 900px) {
+    .appbar { height: auto; flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
+    .appbar .seg.dark { order: 9; flex: 1 0 100%; }
+    .appbar .seg.dark button { flex: 1; }
+    #tab-points { grid-template: minmax(0, 1.3fr) minmax(0, 1fr) / minmax(0, 1fr); }
+    #tab-robots { grid-template: none / repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); overflow: auto; }
+    #robots, #robots.many { display: contents; }
+    #tab-roles { grid-template-columns: minmax(0, 1fr); }
+  }
+  :root[data-orient=portrait] .appbar { height: auto; flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
+  :root[data-orient=portrait] .appbar .seg.dark { order: 9; flex: 1 0 100%; }
+  :root[data-orient=portrait] .appbar .seg.dark button { flex: 1; }
+  :root[data-orient=portrait] #tab-points { grid-template: minmax(0, 1.3fr) minmax(0, 1fr) / minmax(0, 1fr); }
+  :root[data-orient=portrait] #tab-robots { grid-template: none / repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); overflow: auto; }
+  :root[data-orient=portrait] #robots, :root[data-orient=portrait] #robots.many { display: contents; }
+  :root[data-orient=portrait] #tab-roles { grid-template-columns: minmax(0, 1fr); }
+</style>
+</head><body>
+<div class="screen">
+  <header id="bar"></header>
+  <div id="strips" aria-live="assertive"></div>
+  <main class="body">
+    <section id="tab-points" class="tab" hidden>
+      <div class="card col">
+        <div class="maphead"><p class="eyebrow sm" id="mapTitle">Bản đồ robot</p><span id="robotPick" class="seg sm"></span><button class="btn sm" id="zoom">Phóng 1×</button></div>
+        <div class="mapbox"><canvas id="vmap" width="1000" height="700"></canvas><div class="warnmap" id="mapWarn" hidden></div></div>
+        <div class="selrow">
+          <p class="muted" id="mapHint">Bấm “+ Thêm bàn” rồi chọn điểm trong danh sách ĐIỂM DỪNG và chạm lên bản đồ để đặt vị trí robot dừng. Chính xác nhất: lái robot tới đúng chỗ (app Valetudo hoặc bê robot tới) rồi bấm “Dùng vị trí robot”. Phóng to rồi chạm bản đồ để dời tâm.</p>
+          <div class="selrow" id="pttools" hidden style="flex:1">
+            <div class="who"><b id="selName"></b><span class="id" id="selXY"></span></div>
+            <span class="ptpos" id="ptpos">
+              <span class="arrows"><button class="btn sm" data-mv="-10,0" aria-label="Sang trái">←</button><button class="btn sm" data-mv="0,-10" aria-label="Lên">↑</button><button class="btn sm" data-mv="0,10" aria-label="Xuống">↓</button><button class="btn sm" data-mv="10,0" aria-label="Sang phải">→</button></span>
+              <button class="btn sm dark" id="useRobot">Dùng vị trí robot</button>
+              <button class="btn sm" id="probe">Chạy thử tới đây</button>
+              <button class="btn sm warn" id="clearXY">Xoá vị trí</button>
+            </span>
+            <button class="btn sm" id="delPoint">Xoá điểm</button>
+          </div>
+        </div>
+      </div>
+      <div class="card col"><p class="eyebrow sm" id="ptCount">Điểm dừng</p><div class="list" id="points"></div>
+        <div class="foot"><button class="btn primary" id="addTable">+ Thêm bàn</button><button class="btn" id="addStation">+ Thêm trạm</button></div></div>
+    </section>
+    <section id="tab-robots" class="tab" hidden>
+      <div id="robots"></div>
+      <div class="col">
+        <div class="card"><p class="eyebrow sm">Pin</p><div id="battery"></div></div>
+        <button class="btn" id="addRobot">+ Thêm robot</button>
+      </div>
+    </section>
+    <section id="tab-roles" class="tab" hidden>
+      <div class="card col"><p class="eyebrow sm">Vai trò · màn hình trạm</p><div class="col" id="roles"></div></div>
+      <div class="card"><p class="eyebrow sm">Thời gian & khay</p><div id="timing"></div></div>
+    </section>
+    <section id="tab-backup" class="tab" hidden><div class="card backup">
+      <p class="eyebrow sm" style="margin:0">Sao lưu</p>
+      <h2 id="info"></h2>
+      <p class="muted" id="saved" hidden></p>
+      <div class="two"><button class="act dark" id="download"><b>Tải xuống JSON</b></button>
+        <label class="act outline"><b>Nhập JSON</b><input type="file" id="upload" accept="application/json" hidden></label></div>
+      <button class="btn warn" id="reset">Khôi phục mặc định</button>
+      <p class="small muted">Nhập JSON chỉ nạp vào trang này; bấm <b>Lưu</b> mới có hiệu lực. Khôi phục mặc định bị từ chối khi còn lệnh đang chạy.</p></div></section>
+  </main>
+</div>
+<div id="offline" hidden>Mất kết nối tới hệ thống điều phối — đang kết nối lại…</div>
+
+<script>window.module = { exports: {} };</script><script src="lib/site.js"></script><script>const SiteLib = module.exports;</script>
+<script src="transport.js"></script><script src="common.js"></script><script src="vmap.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let BY = 'Quản lý ca';
+try { const s = JSON.parse(localStorage.getItem('mekoniq.station')); if (s && s.name) BY = s.name; } catch (e) {}
+const clone = o => JSON.parse(JSON.stringify(o));
+const KIND_VI = { table: 'Bàn', station: 'Trạm', dish: 'Rửa', dock: 'Sạc' };
+const HINT = {
+  arriveCm: 'Dừng cách điểm ≤ bấy nhiêu cm thì coi là đã tới', nomoveSec: 'Sau lệnh mà chừng ấy giây robot chưa chạy → xét theo vị trí (rời dock chậm: tăng lên 20–30)',
+  tripSec: 'Một chuyến chạy quá chừng ấy giây → bị chặn (lưới cuối)', retrySec: 'Bị chắn: thử đi tiếp sau bấy nhiêu giây', retryMax: 'Thử bấy nhiêu lần rồi mới báo trạm',
+  stuckSec: 'Đang chạy mà đứng yên bấy nhiêu giây → coi là bị chắn', progressCm: 'Nhúc nhích ít hơn bấy nhiêu cm = đứng yên', acceptCm: 'Sau khi thử hết, dừng cách đích ≤ bấy nhiêu cm vẫn coi là đã tới (0 = tắt)',
+};
+
+// D = the draft being edited; it reaches the orchestrator on Lưu. dirty = differs from App.site.
+let D = null, dirty = false, saving = false, tab = new URLSearchParams(location.search).get('tab') || 'points', sel = null, robotId = null;
+let stale = false, err = '';   // strips under the app bar: another station saved / last save or import failed
+const TABS = { points: 'Điểm & bản đồ', robots: 'Robot', roles: 'Vai trò & thời gian', backup: 'Sao lưu' };
+const valRobots = () => D.robots.filter(r => r.driver === 'valetudo');
+const curRobot = () => valRobots().find(r => r.id === robotId) || valRobots()[0] || null;
+
+$('bar').outerHTML = APPBAR({ title: 'Cấu hình', sub: 'Setup', home: 'station.html?view=mon',
+  tabs: Object.entries(TABS).map(([id, label]) => ({ id, label, on: tab === id })),
+  right: '<span class="pill" id="rev">…</span><button class="btn" id="revert" disabled>Huỷ thay đổi</button><button class="btn primary" id="save" disabled>Đã lưu</button>' });
+startClock();
+
+function setDirty(v) {
+  dirty = v;
+  $('save').disabled = !dirty || saving; $('revert').disabled = !dirty;
+  $('save').textContent = saving ? 'Đang lưu…' : dirty ? 'Lưu' : 'Đã lưu';
+}
+// 'ok' -> toast; 'err' -> red strip until the next save / dismiss; '' clears.
+function msg(text, cls) { err = cls === 'err' ? text : ''; if (cls === 'ok') toast(text, 'ok'); strips(); }
+function strips() {
+  setHTML($('strips'), (stale ? '<div class="strip"><span class="kind">Cảnh báo</span><span class="grow">Máy khác vừa lưu cấu hình — bản anh/chị đang sửa đã cũ.</span><button class="btn sm dark" id="reload">Tải lại bản mới</button></div>' : '') +
+    (err ? `<div class="strip error"><span class="kind">Lỗi</span><span class="grow">${esc(err)}</span><button class="btn sm dark" data-act="ack">Đã biết</button></div>` : ''));
+}
+function load() { D = clone(App.site); setDirty(false); stale = false; strips(); sel = null; render(); }
+
+function render() {
+  if (!D) return;
+  $('rev').textContent = 'Bản ' + (App.site.rev || 0);
+  document.querySelector('.appbar .title small').textContent = 'Setup · ' + (App.site.name || '');
+  for (const b of document.querySelectorAll('.appbar [data-tab]')) b.setAttribute('aria-pressed', b.dataset.tab === tab);
+  for (const k of Object.keys(TABS)) $('tab-' + k).hidden = tab !== k;
+  if (tab === 'points') renderPoints();
+  if (tab === 'robots') renderRobots();
+  if (tab === 'roles') renderRoles();
+  if (tab === 'backup') renderBackup();
+}
+// "− n +" around a typeable number input; the buttons write through the input's own 'input' handler (same dirty path).
+const stepper = (attr, v, d, lo, hi, unit = '') => `<div class="stepper"><button type="button" data-d="${-d}" aria-label="Giảm">−</button><input type="number" ${attr} min="${lo}" max="${hi}" value="${esc(v)}"><span class="u">${unit}</span><button type="button" data-d="${d}" aria-label="Tăng">+</button></div>`;
+document.addEventListener('click', e => {
+  const b = e.target.closest('.stepper [data-d]'); if (!b) return;
+  const i = b.parentNode.querySelector('input');
+  i.value = Math.min(+i.max, Math.max(+i.min, (Number(i.value) || 0) + +b.dataset.d));
+  i.dispatchEvent(new Event('input', { bubbles: true }));
+});
+
+// ---- Points ----
+function renderPoints() {
+  const order = ['station', 'dish', 'dock', 'table'];
+  const R = valRobots(), r = curRobot();
+  $('robotPick').innerHTML = R.length > 1 ? R.map(x => `<button data-robot="${x.id}" aria-pressed="${r && r.id === x.id}">${x.id}</button>`).join('') : '';
+  $('mapTitle').textContent = r ? `Bản đồ robot ${r.id} · chạm để đặt điểm đang chọn` : 'Bản đồ robot · chỉ có với robot thật (Valetudo)';
+  const ids = order.flatMap(kind => Object.keys(D.points).filter(k => D.points[k].kind === kind).sort());
+  $('ptCount').textContent = 'Điểm dừng · ' + ids.length;
+  const h = ids.map(id => {
+    const p = D.points[id], pt = r && r.valetudo.points[id];
+    const where = p.kind === 'dock' ? '<span class="pill">lấy từ robot</span>' : !r ? '<span></span>' : pt ? '<span class="pill ok">● đã định vị</span>' : '<span class="pill warn">○ chưa định vị</span>';
+    return `<div class="row ${sel === id ? 'sel' : ''}" data-pt="${id}"><span class="k">${KIND_VI[p.kind] || p.kind}</span><input type="text" value="${esc(p.name)}" data-name="${id}" aria-label="Tên">${where}<span class="id">${id}</span></div>`;
+  }).join('') + (Object.values(D.points).some(p => p.kind === 'table') ? '' : '<p class="small muted" style="margin:8px 6px">Chưa có bàn nào — bấm “+ Thêm bàn”.</p>');
+  setHTML($('points'), h);
+  drawMap();
+}
+
+$('points').addEventListener('input', e => { const id = e.target.dataset.name; if (id) { D.points[id].name = e.target.value; setDirty(true); } });
+$('points').addEventListener('click', e => {
+  const row = e.target.closest('[data-pt]');
+  if (e.target.tagName === 'INPUT') {   // typing a name also selects the point (no re-render, so the input keeps focus)
+    if (row && sel !== row.dataset.pt) { sel = row.dataset.pt; for (const x of $('points').querySelectorAll('.row')) x.classList.toggle('sel', x.dataset.pt === sel); drawMap(); }
+    return;
+  }
+  if (row) { sel = sel === row.dataset.pt ? null : row.dataset.pt; renderPoints(); }
+});
+$('delPoint').onclick = () => {
+  const id = sel; if (!id || !D.points[id] || D.points[id].kind === 'dish') return;
+  armed('del-' + id, () => { delete D.points[id]; for (const r of valRobots()) delete r.valetudo.points[id]; if (sel === id) sel = null; setDirty(true); render(); }, render);
+};
+$('robotPick').onclick = e => { const b = e.target.closest('[data-robot]'); if (b) { robotId = b.dataset.robot; renderPoints(); } };
+$('addTable').onclick = () => { const t = SiteLib.nextTable(D); D.points[t.id] = { name: t.name, kind: 'table' }; sel = t.id; setDirty(true); render(); };
+$('addStation').onclick = () => {
+  const id = prompt('Mã trạm (chữ/số, ví dụ bar2):'); if (!id) return;
+  if (!SiteLib.ID.test(id) || D.points[id]) return toast('Mã không hợp lệ hoặc đã có', 'warn');
+  const name = prompt('Tên trạm:', id) || id;
+  D.points[id] = { name, kind: 'station' }; sel = id; setDirty(true); render();
+};
+
+// ---- Map (Task 11: canvas, teach by robot position, probe) ----
+let vm = null, mapT = 0, zoom = 1, lastMap = null, tapAt = null;
+function drawMap() {
+  const r = curRobot(), p = sel && D.points[sel];
+  // Selected-point row replaces the hint; positioning tools only for a Valetudo robot and a point the robot doesn't report itself.
+  $('pttools').hidden = !p; $('mapHint').hidden = !!p;
+  $('ptpos').hidden = !(p && r && p.kind !== 'dock');
+  if (p) {
+    const pt = r && r.valetudo.points[sel], k = 'del-' + sel;
+    $('selName').textContent = p.name;
+    $('selXY').textContent = p.kind === 'dock' ? 'lấy từ robot' : !r ? '' : pt ? `x ${pt.x} · y ${pt.y} cm` : 'chưa định vị — chạm lên bản đồ';
+    $('delPoint').disabled = p.kind === 'dish';
+    $('delPoint').textContent = isArmed(k) ? 'Xoá điểm?' : 'Xoá điểm';
+    $('delPoint').classList.toggle('armed', isArmed(k));
+    if (r) {
+      const live = App.state && App.state.robots.find(x => x.id === r.id);
+      $('useRobot').disabled = !(live && live.pos);
+      $('probe').disabled = !(pt && live && robotStatus(live)[0] === 'Sẵn sàng');
+    }
+  }
+  if (!vm) return;
+  if (!r) return vm.draw({});
+  const live = App.state && App.state.robots.find(x => x.id === r.id);
+  const points = {};
+  for (const [id, p] of Object.entries(D.points)) if (r.valetudo.points[id]) points[id] = { ...r.valetudo.points[id], name: p.name, kind: p.kind, sel: sel === id };
+  vm.setZoom(zoom, sel && points[sel] ? points[sel] : tapAt || (live && live.pos));
+  vm.draw({ points, robots: live && live.pos ? [{ id: r.id, ...live.pos, tone: robotStatus(live)[1], ring: live.halt === 'blocked' || live.nav === 'wait' }] : [], charger: lastMap && lastMap.charger });
+  const ref = r.valetudo.mapRef;
+  $('mapWarn').hidden = !(lastMap && ref && ref.size && (ref.size.x !== lastMap.size.x || ref.size.y !== lastMap.size.y));
+  $('mapWarn').textContent = 'Bản đồ robot có thể đã vẽ lại — kiểm tra lại các điểm';
+}
+async function pollMap() {
+  const r = curRobot();
+  if (!r) return;
+  try {
+    const res = await fetch('/api/map/' + encodeURIComponent(r.id), { cache: 'no-store' });
+    if (!res.ok) { $('mapHint').textContent = 'Chưa nhận được bản đồ từ robot ' + r.id + ' — kiểm tra MQTT và “Provide map data” trong Valetudo.'; return; }
+    const m = await res.json();
+    if (m.t !== mapT) { mapT = m.t; lastMap = m; vm.setMap(m); }
+    drawMap();
+  } catch (e) {}
+}
+function setXY(x, y) {
+  const r = curRobot(); if (!r || !sel) return;
+  r.valetudo.points[sel] = { x: Math.max(0, Math.round(x)), y: Math.max(0, Math.round(y)) };
+  setDirty(true); renderPoints();
+}
+document.querySelector('#pttools .arrows').onclick = e => {
+  const b = e.target.closest('[data-mv]'); const r = curRobot();
+  if (!b || !r || !sel || !r.valetudo.points[sel]) return;
+  const [dx, dy] = b.dataset.mv.split(',').map(Number), p = r.valetudo.points[sel];
+  setXY(p.x + dx, p.y + dy);
+};
+$('useRobot').onclick = () => { const r = curRobot(), live = App.state && App.state.robots.find(x => x.id === r.id); if (live && live.pos) setXY(live.pos.x, live.pos.y); };
+$('clearXY').onclick = () => { const r = curRobot(); if (r && sel) { delete r.valetudo.points[sel]; setDirty(true); renderPoints(); } };
+$('probe').onclick = () => { const r = curRobot(), p = r && r.valetudo.points[sel]; if (p) { send({ type: 'probe', robot: r.id, x: p.x, y: p.y, by: BY }); toast(`${r.id} chạy thử tới ${D.points[sel].name}`); } };
+$('zoom').onclick = () => { zoom = zoom % 3 + 1; $('zoom').textContent = `Phóng ${zoom}×`; drawMap(); };
+
+// ---- Robots ----
+function renderRobots() {
+  const docks = Object.keys(D.points).filter(k => D.points[k].kind === 'dock');
+  const knobs = Object.keys(SiteLib.KNOBS).length + 1;
+  $('robots').classList.toggle('many', D.robots.length > 3);
+  setHTML($('robots'), D.robots.map((r, i) => `<div class="card col rcard" data-robot-i="${i}">
+    <div class="rhead"><span class="av">${esc(r.id)}</span><b>Robot ${esc(r.id)}</b><span class="pill" data-conn="${i}"></span></div>
+    <label class="f"><span class="lbl">Mã robot</span><input type="text" data-k="id" value="${esc(r.id)}"></label>
+    <label class="f"><span class="lbl">Trạm sạc</span><select data-k="dock">${docks.map(d => `<option value="${d}" ${r.dock === d ? 'selected' : ''}>${esc(D.points[d].name)}</option>`).join('')}</select></label>
+    <div class="f"><span class="lbl">Loại</span><div class="seg sm"><button data-drv="valetudo" aria-pressed="${r.driver === 'valetudo'}">Robot thật</button><button data-drv="sim" aria-pressed="${r.driver !== 'valetudo'}">Giả lập</button></div></div>
+    ${r.driver === 'valetudo' ? `<label class="f"><span class="lbl">Topic MQTT</span><input type="text" class="id" data-k="topic" value="${esc(r.valetudo.topic || '')}" placeholder="valetudo/TenRobot"><small>Valetudo → Connectivity → MQTT: &lt;prefix&gt;/&lt;identifier&gt;</small></label>
+      <details class="adv"><summary>Nâng cao · ${knobs} thông số</summary>` +
+      Object.entries(SiteLib.KNOBS).map(([k, [d, lo, hi]]) => `<label class="knob"><div><span class="id">${k}</span><small>${HINT[k]}</small></div><input type="number" data-k="${k}" min="${lo}" max="${hi}" value="${r.valetudo[k] ?? ''}" placeholder="${d}"></label>`).join('') +
+      `<label class="knob"><div><span class="id">retryErr</span><small>Lỗi Valetudo khớp mẫu này được thử lại (regex)</small></div><input type="text" class="id" data-k="retryErr" value="${esc(r.valetudo.retryErr ?? '')}" placeholder="${SiteLib.RETRY_ERR}"></label></details>` : ''}
+    <button class="btn sm warn del ${isArmed('delr-' + i) ? 'armed' : ''}" data-delr="${i}">${isArmed('delr-' + i) ? 'Xoá?' : 'Xoá robot'}</button></div>`).join(''));
+  conn();
+  setHTML($('battery'), `<div class="bat"><div><b>Pin yếu</b><small>Dưới mức này: xong việc về sạc, không nhận việc</small></div>${stepper('data-t="lowBattery"', D.timing.lowBattery, 5, 5, 95, '%')}</div>
+    <div class="bat"><div><b>Pin đủ</b><small>Từ mức này robot nhận việc lại</small></div>${stepper('data-t="chargedBattery"', D.timing.chargedBattery, 5, 5, 95, '%')}</div>`);
+}
+// Connection pill from the live state; updated in place so typing in a card is never interrupted.
+function conn() {
+  for (const el of document.querySelectorAll('[data-conn]')) {
+    const r = D.robots[+el.dataset.conn], live = r && App.state && App.state.robots.find(x => x.id === r.id);
+    const [t, c] = !r || r.driver !== 'valetudo' ? ['Giả lập', 'go'] : live && !live.offline ? ['Đã kết nối', 'ok'] : ['Mất kết nối', 'danger'];
+    el.textContent = t; el.className = 'pill ' + c;
+  }
+}
+$('tab-robots').addEventListener('input', e => {
+  const t = e.target, g = t.closest('[data-robot-i]');
+  if (t.dataset.t) { D.timing[t.dataset.t] = t.value; setDirty(true); return; }
+  if (!g) return;
+  const r = D.robots[+g.dataset.robotI], k = t.dataset.k;
+  if (k === 'id' || k === 'dock') r[k] = t.value.trim();
+  else if (k === 'topic' || k === 'retryErr') r.valetudo[k] = t.value;
+  else r.valetudo[k] = t.value;
+  setDirty(true);
+});
+$('robots').addEventListener('click', e => {
+  const g = e.target.closest('[data-robot-i]'), drv = e.target.closest('[data-drv]');
+  if (g && drv) {
+    const r = D.robots[+g.dataset.robotI];
+    if (drv.dataset.drv === 'valetudo') { if (r.driver === 'valetudo') return; r.driver = 'valetudo'; r.valetudo = r.valetudo || { topic: '', points: {} }; }
+    else { if (r.driver !== 'valetudo') return; delete r.driver; delete r.valetudo; }
+    setDirty(true); return render();
+  }
+  const b = e.target.closest('[data-delr]'); if (!b) return;
+  armed('delr-' + b.dataset.delr, () => { D.robots.splice(+b.dataset.delr, 1); setDirty(true); render(); }, render);
+});
+$('addRobot').onclick = () => {
+  let n = D.robots.length + 1; while (D.robots.some(r => r.id === 'R' + n)) n++;
+  const dock = Object.keys(D.points).find(k => D.points[k].kind === 'dock');
+  D.robots.push({ id: 'R' + n, dock, driver: 'valetudo', valetudo: { topic: '', points: {} } }); setDirty(true); render();
+};
+
+// ---- Roles & timing ----
+const SCREENS = { deliver: 'Giao món', bus: 'Thu dọn', summon: 'Gọi robot' };
+function renderRoles() {
+  const homes = Object.keys(D.points).filter(k => ['station', 'dish'].includes(D.points[k].kind));
+  setHTML($('roles'), D.roles.map((r, i) => `<div class="role" data-role-i="${i}"><div class="rh"><input type="text" data-k="name" value="${esc(r.name)}" aria-label="Tên vai trò"><span class="id">${esc(r.id)}</span></div>
+    <div class="rr"><span class="lbl">Màn mặc định</span><div class="seg sm">${Object.entries(SCREENS).map(([k, t]) => `<button data-rtab="${k}" aria-pressed="${r.tab === k}">${t}</button>`).join('')}</div>
+    <label><span class="lbl">Vị trí</span><select data-k="home"><option value="">— không có —</option>${homes.map(h => `<option value="${h}" ${r.home === h ? 'selected' : ''}>${esc(D.points[h].name)}</option>`).join('')}</select></label></div></div>`).join(''));
+  const T = { loadSec: ['Chờ xếp đồ tại trạm', 'Quá giờ huỷ lệnh', 10], handoffSec: ['Chờ khách nhận món', 'Quá giờ mang về', 10], remindSec: ['Nhắc khách mỗi', '', 5], standbySec: ['Robot được gọi tới chờ tối đa', '', 30] };
+  setHTML($('timing'), Object.entries(T).map(([k, [t, s, d]]) => `<div class="trow"><div><b>${t}</b>${s ? `<small>${s}</small>` : ''}</div>${stepper(`data-t="${k}"`, D.timing[k], d, 0, 3600, 's')}</div>`).join('') +
+    `<div class="trow"><div><b>Số khay trên robot</b></div>${stepper('data-trays="1"', D.trays, 1, 1, 8)}</div>`);
+}
+$('tab-roles').addEventListener('input', e => {
+  const t = e.target, g = t.closest('[data-role-i]');
+  if (t.dataset.t) D.timing[t.dataset.t] = t.value;
+  else if (t.dataset.trays) D.trays = t.value;
+  else if (g) D.roles[+g.dataset.roleI][t.dataset.k] = t.value || null;
+  setDirty(true);
+});
+$('roles').addEventListener('click', e => {
+  const b = e.target.closest('[data-rtab]'), g = b && b.closest('[data-role-i]');
+  if (g) { D.roles[+g.dataset.roleI].tab = b.dataset.rtab; setDirty(true); renderRoles(); }
+});
+
+// ---- Backup ----
+function renderBackup() {
+  const S = App.site, lastLog = App.state && App.state.log.find(l => /cấu hình/.test(l.text));
+  $('info').textContent = `Đang chạy bản ${S.rev || 0}`;
+  $('saved').textContent = S.by && S.savedAt ? `Lưu lần cuối bởi ${S.by} lúc ${clock(S.savedAt)}` : lastLog ? `${lastLog.text} lúc ${clock(lastLog.t)}` : '';
+  $('saved').hidden = !$('saved').textContent;
+}
+$('download').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(App.site, null, 2)], { type: 'application/json' }));
+  a.download = `site-${(App.site.name || 'mekoniq').replace(/[^\w-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$('upload').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (f.size > SiteLib.MAX_BYTES) { msg('Tệp quá lớn (> 512 KB)', 'err'); e.target.value = ''; return; }
+  try {
+    const parsed = JSON.parse(await f.text());
+    const { site: norm, errors } = SiteLib.normalize(parsed, App.site);
+    if (errors.length) return msg('Tệp không hợp lệ: ' + errors.join('; '), 'err');
+    D = norm; D.rev = App.site.rev; setDirty(true); render(); msg('Đã nạp tệp — bấm Lưu để áp dụng', 'ok');
+  } catch (err) { msg('Tệp không đọc được (không phải JSON)', 'err'); }
+  e.target.value = '';
+};
+$('reset').onclick = () => armed('reset', () => { saving = true; setDirty(true); send({ type: 'siteReset', by: BY }); }, () => { $('reset').textContent = isArmed('reset') ? 'Chạm lần nữa để khôi phục' : 'Khôi phục mặc định'; $('reset').classList.toggle('armed', isArmed('reset')); });
+
+// ---- Save / revert / tabs ----
+$('save').onclick = () => {
+  const r = curRobot();
+  if (r && lastMap) r.valetudo.mapRef = { size: lastMap.size, ...(lastMap.charger && { charger: lastMap.charger }) };   // to notice a re-mapped robot later
+  msg(''); saving = true; setDirty(true); send({ type: 'siteSave', site: D, by: BY });
+};
+$('revert').onclick = () => load();
+$('strips').onclick = e => { if (e.target.id === 'reload') load(); if (e.target.dataset.act === 'ack') msg(''); };
+document.querySelector('.appbar .seg').onclick = e => {
+  const b = e.target.closest('[data-tab]'); if (!b) return;
+  tab = b.dataset.tab;
+  const q = new URLSearchParams(location.search); q.set('tab', tab); history.replaceState(null, '', '?' + q);
+  render();
+};
+
+connect(m => {
+  if (m.type === 'site') {
+    if (!D || !dirty) load();
+    else if (saving && m.site.rev === D.rev + 1) { saving = false; load(); msg('Đã lưu cấu hình', 'ok'); }   // our save, acknowledged
+    else if (saving) { saving = false; setDirty(true); stale = true; msg('Chưa lưu — cấu hình trên máy chủ vừa đổi (mất kết nối hoặc máy khác lưu). Tải lại rồi sửa lại.', 'err'); }
+    else { stale = true; strips(); }
+    if (!robotId && curRobot()) robotId = curRobot().id;
+    if (!vm && typeof VMap === 'function') { vm = VMap($('vmap'), { fit: true, onTap: (x, y, hitId) => { if (hitId && !sel) { sel = hitId; renderPoints(); } else if (sel) setXY(x, y); else { tapAt = { x, y }; drawMap(); } } }); vm.resize(); drawMap(); pollMap(); setInterval(pollMap, 10000); }
+  }
+  if (m.type === 'event' && typeof m.text === 'string' && m.text.startsWith('Không lưu')) { saving = false; setDirty(true); msg(m.text, 'err'); }
+  if (m.type === 'state') { if (tab === 'points') drawMap(); if (tab === 'robots') conn(); if (tab === 'backup') renderBackup(); }
+});
+</script>
+</body></html>
