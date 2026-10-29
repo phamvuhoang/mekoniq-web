@@ -448,6 +448,8 @@ function handle(st, site, input, now) {
       else if (d.event === 'arrived' && st.robots[d.robot]) arrived(c, st.robots[d.robot], d.token);
       else if (d.event === 'reroute' && st.robots[d.robot]) reroute(c, st.robots[d.robot], d.why);
       else if (d.event === 'log' && st.robots[d.robot]) log(c, 'info', String(d.text).slice(0, 160), d.robot);
+      else if (d.event === 'alert' && typeof d.key === 'string') alert(c, d.key, d.level === 'error' ? 'error' : 'warn', String(d.text).slice(0, 200));
+      else if (d.event === 'resolve' && typeof d.key === 'string') resolve(c, d.key);
     } else fromUI(c, d, input.session, input.seed);
   }
   assign(c);

@@ -99,6 +99,37 @@
   .backup .act { cursor: pointer; }
   #reset { justify-self: start; }
 
+  /* Hệ thống (read-only): checks + Valetudo facts | server + real robots */
+  #tab-system { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; align-content: start; }
+  #tab-system > .col { gap: 16px; }
+  #sysOffline { grid-column: 1 / -1; border-radius: 12px; }
+  .checks { display: grid; gap: 10px; }
+  .chk { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; font-size: 14px; line-height: 1.35; }
+  .chk .ic { font-weight: 900; text-align: center; }
+  .chk small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+  .chk code, .sysnote code { font: 500 12px var(--mono); }
+  .checks .bad { color: var(--danger); font-weight: 700; }
+  .checks .good { color: var(--green); font-weight: 700; }
+  .checks .warn { color: var(--warn-ink); }
+  .checks .info { color: var(--muted); }
+  .checks .warn b, .checks .info b { color: var(--ink); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 12px; }
+  .stat { display: grid; gap: 2px; min-width: 0; }
+  .stat b { font-size: 15px; overflow-wrap: anywhere; }
+  .stat.big b { font: 500 30px var(--mono); }
+  .stat b.id { font: 500 15px var(--mono); color: var(--ink); }
+  .stat b.vi { font-family: var(--font); }
+  .mqtt { margin: 0 0 6px; padding: 12px 14px; border-radius: 12px; background: var(--light); font: 500 15px/1.6 var(--mono); white-space: pre-wrap; user-select: all; }
+  .sysnote { margin: 0 0 10px; }
+  #ackIp { margin-top: 14px; }
+  .rob { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .rob:first-child { border-top: 0; padding-top: 0; }
+  .rob .rhead { margin-bottom: 4px; }
+  .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+  .kv > span:first-child { color: var(--muted); }
+  .kv > span:last-child { text-align: right; overflow-wrap: anywhere; }
+  .rob .btn { justify-self: start; margin-top: 6px; }
+
   @media (orientation: portrait), (max-width: 900px) {
     .appbar { height: auto; flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
     .appbar .seg.dark { order: 9; flex: 1 0 100%; }
@@ -107,6 +138,7 @@
     #tab-robots { grid-template: none / repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); overflow: auto; }
     #robots, #robots.many { display: contents; }
     #tab-roles { grid-template-columns: minmax(0, 1fr); }
+    #tab-system { grid-template-columns: minmax(0, 1fr); }
   }
   :root[data-orient=portrait] .appbar { height: auto; flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
   :root[data-orient=portrait] .appbar .seg.dark { order: 9; flex: 1 0 100%; }
@@ -115,6 +147,7 @@
   :root[data-orient=portrait] #tab-robots { grid-template: none / repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); overflow: auto; }
   :root[data-orient=portrait] #robots, :root[data-orient=portrait] #robots.many { display: contents; }
   :root[data-orient=portrait] #tab-roles { grid-template-columns: minmax(0, 1fr); }
+  :root[data-orient=portrait] #tab-system { grid-template-columns: minmax(0, 1fr); }
 </style>
 </head><body>
 <div class="screen">
@@ -161,6 +194,18 @@
         <label class="act outline"><b>Nhập JSON</b><input type="file" id="upload" accept="application/json" hidden></label></div>
       <button class="btn warn" id="reset">Khôi phục mặc định</button>
       <p class="small muted">Nhập JSON chỉ nạp vào trang này; bấm <b>Lưu</b> mới có hiệu lực. Khôi phục mặc định bị từ chối khi còn lệnh đang chạy.</p></div></section>
+    <section id="tab-system" class="tab" hidden>
+      <div class="strip" id="sysOffline" hidden><span class="kind">Hệ thống</span><span class="grow">Chỉ có khi chạy trên máy nhà hàng — bản web demo không có máy chủ, chỉ kiểm tra được cấu hình.</span></div>
+      <div class="col">
+        <div class="card"><p class="eyebrow sm">Kiểm tra</p><div class="checks" id="sysChecks"></div></div>
+        <div class="card" id="sysMqtt" hidden><p class="eyebrow sm">Điền vào Valetudo · Connectivity → MQTT</p><pre class="mqtt" id="mqttCfg"></pre>
+          <p class="small sysnote">Password: xem <code>cat ~/robot/.mqtt-pass</code> trên điện thoại</p><button class="btn sm" id="copyMqtt">Chép</button></div>
+      </div>
+      <div class="col">
+        <div class="card" id="sysServerCard" hidden><p class="eyebrow sm">Máy chủ</p><div id="sysServer"></div><button class="btn primary" id="ackIp" hidden>Đã cập nhật robot và QR</button></div>
+        <div class="card"><p class="eyebrow sm">Robot thật</p><div id="sysRobots"></div></div>
+      </div>
+    </section>
   </main>
 </div>
 <div id="offline" hidden>Mất kết nối tới hệ thống điều phối — đang kết nối lại…</div>
@@ -182,7 +227,7 @@ const HINT = {
 // D = the draft being edited; it reaches the orchestrator on Lưu. dirty = differs from App.site.
 let D = null, dirty = false, saving = false, tab = new URLSearchParams(location.search).get('tab') || 'points', sel = null, robotId = null;
 let stale = false, err = '';   // strips under the app bar: another station saved / last save or import failed
-const TABS = { points: 'Điểm & bản đồ', robots: 'Robot', roles: 'Vai trò & thời gian', backup: 'Sao lưu' };
+const TABS = { points: 'Điểm & bản đồ', robots: 'Robot', roles: 'Vai trò & thời gian', backup: 'Sao lưu', system: 'Hệ thống' };
 const valRobots = () => D.robots.filter(r => r.driver === 'valetudo');
 const curRobot = () => valRobots().find(r => r.id === robotId) || valRobots()[0] || null;
 
@@ -214,6 +259,7 @@ function render() {
   if (tab === 'robots') renderRobots();
   if (tab === 'roles') renderRoles();
   if (tab === 'backup') renderBackup();
+  if (tab === 'system') renderSystem();
 }
 // "− n +" around a typeable number input; the buttons write through the input's own 'input' handler (same dirty path).
 const stepper = (attr, v, d, lo, hi, unit = '') => `<div class="stepper"><button type="button" data-d="${-d}" aria-label="Giảm">−</button><input type="number" ${attr} min="${lo}" max="${hi}" value="${esc(v)}"><span class="u">${unit}</span><button type="button" data-d="${d}" aria-label="Tăng">+</button></div>`;
@@ -426,6 +472,87 @@ $('upload').onchange = async e => {
 };
 $('reset').onclick = () => armed('reset', () => { saving = true; setDirty(true); send({ type: 'siteReset', by: BY }); }, () => { $('reset').textContent = isArmed('reset') ? 'Chạm lần nữa để khôi phục' : 'Khôi phục mặc định'; $('reset').classList.toggle('armed', isArmed('reset')); });
 
+// ---- Hệ thống (read-only): GET /api/health every 3 s + App.site / App.state ----
+let health = null, healthErr = false, healthTimer = null;
+async function pollHealth() {
+  try {
+    const res = await fetch('/api/health', { cache: 'no-store' });
+    const h = res.ok ? await res.json().catch(() => null) : null;
+    if (h && h.server) { health = h; healthErr = false; }
+    else if (res.status !== 503) { health = null; healthErr = true; clearInterval(healthTimer); }   // no endpoint: static web demo
+  } catch (e) {}   // server unreachable: #offline says so; keep the last report
+  if (tab === 'system') renderSystem();
+}
+const realRobots = () => App.site.robots.filter(r => r.driver === 'valetudo');
+const tableIds = () => Object.keys(App.site.points).filter(k => App.site.points[k].kind === 'table');
+const liveOf = id => App.state && App.state.robots.find(x => x.id === id);
+const ipv4 = w => w && w.ips.find(i => /^\d+\.\d+\.\d+\.\d+$/.test(i));
+// Spec table §5, most severe first. text / hint are HTML (dynamic parts escaped).
+function checks() {
+  const h = health, out = [], add = (level, text, hint = '') => out.push({ level, text, hint });
+  const R = realRobots(), hr = id => (h && h.robots[id]) || {}, ip = h && h.server.ip;
+  if (h && h.server.ipChanged) {
+    const from = esc(h.server.ipChanged.from), to = esc(h.server.ipChanged.to);
+    add('error', `IP điện thoại đã đổi từ ${from} sang ${to}. Robot và mã QR vẫn trỏ về ${from}.`, `1. Valetudo → Connectivity → MQTT → Host = ${to}. 2. Mở lại trang trên tablet. 3. In lại QR. Rồi bấm <b>Đã cập nhật robot và QR</b>.`);
+  }
+  if (h && h.mqtt.link === false) add('error', 'Broker MQTT trong máy không chạy. Robot thật không điều khiển được.', 'Termux: <code>mosquitto -c ~/robot/mosquitto.conf -d</code>');
+  for (const r of R) {
+    const live = liveOf(r.id), seen = hr(r.id).seenAt;
+    if (live && live.offline) add('error', `${esc(r.id)} mất kết nối${seen ? ' ' + ago(seen) : ''}.`, `Robot còn bật? Cùng Wi-Fi? Host MQTT trong Valetudo = ${ip ? esc(ip) : 'IP điện thoại'}?`);
+  }
+  for (const r of R) if (hr(r.id).online && hr(r.id).mapAt === 0) add('warn', `${esc(r.id)} chưa gửi bản đồ.`, 'Valetudo → Connectivity → MQTT → bật "Provide map data".');
+  for (const r of R) {
+    const miss = tableIds().filter(t => !(r.valetudo.points || {})[t]).sort();
+    if (miss.length) add('warn', `${esc(r.id)} chưa định vị ${miss.length} bàn: ${esc(miss.slice(0, 8).join(', '))}${miss.length > 8 ? '…' : ''}.`, 'Tab Điểm & bản đồ → định vị.');
+  }
+  for (const r of R) { const w = hr(r.id).wifi; if (w && w.signal !== null && w.signal < -70) add('warn', `${esc(r.id)} sóng Wi-Fi yếu (${w.signal} dBm).`, 'Robot dễ rớt khi đi xa router.'); }
+  if (h && h.mqtt.clients !== null && h.mqtt.clients < 1 + Object.values(h.robots).filter(x => x.online).length)
+    add('info', `Số kết nối tới broker thấp hơn dự kiến (${h.mqtt.clients}).`, 'Chỉ để tham khảo.');
+  if (dirty) add('info', 'Có thay đổi chưa lưu.');
+  if (h && h.server.firstRun) add('info', 'Chưa thể biết IP có cố định không.', 'Đặt IP cố định cho máy này trên router (DHCP reservation).');
+  return out.length ? out : [{ level: 'ok', text: 'Mọi thứ bình thường', hint: '' }];
+}
+const CHK = { error: ['bad', '✕'], warn: ['warn', '!'], info: ['info', 'i'], ok: ['good', '✓'] };
+function renderChecks() {
+  setHTML($('sysChecks'), checks().map(c => `<div class="chk ${CHK[c.level][0]}"><span class="ic">${CHK[c.level][1]}</span><div><b>${c.text}</b>${c.hint ? `<small>${c.hint}</small>` : ''}</div></div>`).join(''));
+}
+function renderSystem() {
+  if (!healthTimer) { healthTimer = setInterval(pollHealth, 3000); pollHealth(); }
+  const h = health;
+  renderChecks();
+  $('sysOffline').hidden = !healthErr;
+  $('sysServerCard').hidden = $('sysMqtt').hidden = !h;
+  $('ackIp').hidden = !(h && h.server.ipChanged);
+  if (h) {
+    const s = h.server, up = s.uptimeSec, dur = up >= 3600 ? `${Math.floor(up / 3600)} giờ ${Math.floor(up % 3600 / 60)} phút` : `${Math.floor(up / 60)} phút`;
+    const stat = (k, v, cls = '') => `<div class="stat ${cls}"><span class="lbl">${k}</span>${v}</div>`;
+    setHTML($('sysServer'), stat('IP hiện tại · cổng', s.ip ? `<b>${esc(s.ip)}:${s.port}</b>` : '<b class="vi">không rõ</b>', 'big') +
+      `<div class="stats">${stat('Tablet này đang dùng', `<b class="id">${esc(location.host)}</b>`)}${stat('IP lần trước', `<b class="id">${esc(s.lastIp || '—')}</b>`)}${stat('Chạy liên tục', `<b>${dur}</b>`)}</div>`);
+    const cfg = `Host: ${h.mqtt.host || '?'}\nPort: ${h.mqtt.port}\nUsername: ${h.mqtt.user}`;
+    if ($('mqttCfg').textContent !== cfg) $('mqttCfg').textContent = cfg;
+  }
+  const R = realRobots(), T = tableIds();
+  setHTML($('sysRobots'), !R.length ? '<p class="muted" style="margin:0">Site này chỉ có robot mô phỏng</p>' : R.map(r => {
+    const x = (h && h.robots[r.id]) || {}, live = liveOf(r.id), on = live && !live.offline, w = x.wifi, ip = ipv4(w);
+    const kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
+    return `<div class="rob"><div class="rhead"><span class="av">${esc(r.id)}</span><b>Robot ${esc(r.id)}</b><span class="pill ${on ? 'ok' : 'danger'}">${on ? 'Đã kết nối' : 'Mất kết nối'}</span></div>` +
+      kv('Topic MQTT', `<span class="id">${esc(r.valetudo.topic || '—')}</span>`) +
+      kv('Trạng thái', x.status ? esc(x.status) + (x.battery != null ? ` · pin ${x.battery} %` : '') : 'không rõ') +
+      kv('Nhận tin cuối', x.seenAt ? ago(x.seenAt) + ' trước' : 'chưa') +
+      kv('Bản đồ cuối', x.mapAt ? ago(x.mapAt) + ' trước' : 'chưa') +
+      kv('Wi-Fi robot', w ? [ip, w.ssid, w.signal !== null && w.signal + ' dBm'].filter(Boolean).map(esc).join(' · ') || 'không rõ' : 'không rõ') +
+      kv('Bàn đã định vị', `${T.filter(t => (r.valetudo.points || {})[t]).length} / ${T.length}`) +
+      (ip ? `<a class="btn sm" href="http://${esc(ip)}" target="_blank" rel="noopener">Mở Valetudo ↗</a>` : '') + '</div>';
+  }).join(''));
+}
+$('ackIp').onclick = async () => { try { await fetch('/api/health/ack', { method: 'POST' }); } catch (e) {} setTimeout(pollHealth, 700); };   // the report is rebuilt on the next 0.5 s tick
+// http:// page: no navigator.clipboard, so select the block and use the legacy copy command.
+$('copyMqtt').onclick = () => {
+  const rg = document.createRange(), s = getSelection(); rg.selectNodeContents($('mqttCfg')); s.removeAllRanges(); s.addRange(rg);
+  let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+  toast(ok ? 'Đã chép' : 'Chọn chữ rồi chép tay', ok ? 'ok' : 'warn');
+};
+
 // ---- Save / revert / tabs ----
 $('save').onclick = () => {
   const r = curRobot();
@@ -451,7 +578,7 @@ connect(m => {
     if (!vm && typeof VMap === 'function') { vm = VMap($('vmap'), { fit: true, onTap: (x, y, hitId) => { if (hitId && !sel) { sel = hitId; renderPoints(); } else if (sel) setXY(x, y); else { tapAt = { x, y }; drawMap(); } } }); vm.resize(); drawMap(); pollMap(); setInterval(pollMap, 10000); }
   }
   if (m.type === 'event' && typeof m.text === 'string' && m.text.startsWith('Không lưu')) { saving = false; setDirty(true); msg(m.text, 'err'); }
-  if (m.type === 'state') { if (tab === 'points') drawMap(); if (tab === 'robots') conn(); if (tab === 'backup') renderBackup(); }
+  if (m.type === 'state') { if (tab === 'points') drawMap(); if (tab === 'robots') conn(); if (tab === 'backup') renderBackup(); if (tab === 'system') renderChecks(); }
 });
 </script>
 </body></html>
