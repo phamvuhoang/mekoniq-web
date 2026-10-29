@@ -10,6 +10,8 @@ Four static pages sharing `site.css` (tokens copied from `demo/brand.css`, fonts
 - `contact.html` — pilot form; builds a draft to copy, sends nothing to a server
 - `demo/` — interactive demo: same UI + orchestrator as the Node-RED version, running in the browser
   (`demo/transport.js` replaces the WebSocket; tabs/iframes of one browser sync via BroadcastChannel)
+  `demo/site.json` turns on every guest feature (`features`: call staff, guide, order, pay) and carries a 12-item demo menu;
+  the shipped `trial/data/site.json` has them all off — see `trial/docs/valetudo-setup.md` §2b.
 
 ## Update the demo
 Source of truth is `../trial`. After changing UI or logic there:

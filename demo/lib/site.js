@@ -4,7 +4,7 @@
 // Also loaded by the browser (setup.html) the way map.html loads lib/route.js.
 
 const ID = /^[A-Za-z][A-Za-z0-9_-]{0,15}$/;
-const KINDS = ['table', 'station', 'dish', 'dock'];
+const KINDS = ['table', 'station', 'dish', 'dock', 'entrance'];   // entrance = where guests wait to be guided
 // Valetudo per-robot knobs: [default, min, max]. Hints shown by setup.html.
 const KNOBS = {
   arriveCm: [40, 0, 300], nomoveSec: [10, 5, 300], tripSec: [180, 5, 300],
@@ -12,6 +12,8 @@ const KNOBS = {
 };
 const RETRY_ERR = 'unreach|target|navigat|path';
 const MAX_BYTES = 512 * 1024;
+const FEATURES = ['call', 'guide', 'order', 'pay'];
+const NOTES = ['Không hành', 'Ít cay', 'Món nóng', 'Thêm chén'];   // station quick-note chips
 const TIMING = ['loadSec', 'handoffSec', 'remindSec', 'standbySec', 'lowBattery', 'chargedBattery'];
 
 // Validates and cleans a site coming from the UI. Returns {site, errors}; errors non-empty = reject.
@@ -34,6 +36,11 @@ function normalize(input, seed) {
   site.timing = site.timing && typeof site.timing === 'object' ? site.timing : { ...seed.timing };
   for (const k of TIMING) { num(site.timing, k, 0, 3600, 'timing'); if (site.timing[k] === undefined) site.timing[k] = seed.timing[k]; }
 
+  const f = site.features && typeof site.features === 'object' ? site.features : {};
+  site.features = Object.fromEntries(FEATURES.map(k => [k, !!f[k]]));
+  const notes = (Array.isArray(site.notes) ? site.notes : []).map(n => String(n ?? '').trim().slice(0, 24)).filter(Boolean).slice(0, 8);
+  site.notes = notes.length ? notes : [...NOTES];
+
   // points
   site.points = site.points && typeof site.points === 'object' ? site.points : {};
   const dishes = [];
@@ -45,6 +52,13 @@ function normalize(input, seed) {
     if (p.kind === 'dish') dishes.push(id);
     for (const k of ['x', 'y']) if (p[k] !== undefined) { const v = Number(p[k]); if (Number.isFinite(v)) p[k] = v; else delete p[k]; }
   }
+  menu(site, errors);
+  // Bank transfer details for the robot pay screen (features.pay); qr = static QR image uploaded in setup.
+  const pay = site.payment && typeof site.payment === 'object' ? site.payment : {};
+  site.payment = { ...pay, bank: String(pay.bank || '').trim().slice(0, 20), account: String(pay.account || '').replace(/[\s.-]/g, ''), name: String(pay.name || '').trim().slice(0, 60) };
+  if (!/^\d*$/.test(site.payment.account)) errors.push('payment.account: chỉ gồm chữ số');
+  if (pay.qr === undefined || pay.qr === '') delete site.payment.qr;
+  else if (!/^data:image\/(png|jpeg|webp);base64,/.test(String(pay.qr)) || String(pay.qr).length > 200 * 1024) errors.push('payment.qr: phải là ảnh PNG/JPEG/WebP ≤ 200 KB');
   if (dishes.length !== 1) errors.push(`Phải có đúng một điểm loại dish (khu rửa chén), hiện có ${dishes.length}`);
   if (!site.points[site.dishPoint] || site.points[site.dishPoint].kind !== 'dish') errors.push(`dishPoint "${site.dishPoint}" phải là điểm loại dish`);
 
@@ -87,6 +101,35 @@ function normalize(input, seed) {
   return { site, errors };
 }
 
+// Robot menu (features.order): cats [{id, vi, en, station}], items [{id, cat, vi, en, price}] in VND.
+function menu(site, errors) {
+  const m = site.menu && typeof site.menu === 'object' ? site.menu : {};
+  const cats = Array.isArray(m.cats) ? m.cats.filter(x => x && typeof x === 'object') : [];
+  const items = Array.isArray(m.items) ? m.items.filter(x => x && typeof x === 'object') : [];
+  const seen = new Set();
+  const named = (x, what) => {
+    x.id = String(x.id || '');
+    if (!ID.test(x.id)) errors.push(`${what} "${x.id}": id không hợp lệ`);
+    else if (seen.has(x.id)) errors.push(`${what} "${x.id}" bị trùng`);
+    seen.add(x.id);
+    x.vi = String(x.vi || x.id).slice(0, 40); x.en = String(x.en || x.vi).slice(0, 40);
+  };
+  for (const c of cats) {
+    named(c, 'Danh mục');
+    c.station = c.station || 'kitchen';
+    if (c.station !== 'kitchen' && (!site.points[c.station] || site.points[c.station].kind !== 'station')) errors.push(`Danh mục "${c.id}": trạm "${c.station}" không phải điểm loại station`);
+  }
+  seen.clear();
+  for (const it of items) {
+    named(it, 'Món');
+    if (!cats.some(c => c.id === it.cat)) errors.push(`Món "${it.id}": danh mục "${it.cat}" không tồn tại`);
+    const p = Number(it.price);
+    if (!Number.isInteger(p) || p < 0) errors.push(`Món "${it.id}": price phải là số nguyên ≥ 0 (VND)`);
+    else it.price = p;
+  }
+  site.menu = { ...m, cats, items };
+}
+
 // Point ids and robot ids referenced by open missions — they cannot be deleted while in use.
 function inUse(site, st) {
   const points = new Set(), robots = new Set();
@@ -108,4 +151,4 @@ function nextTable(site) {
   }
 }
 
-module.exports = { normalize, inUse, nextTable, KNOBS, RETRY_ERR, MAX_BYTES, ID, KINDS };
+module.exports = { normalize, inUse, nextTable, KNOBS, RETRY_ERR, MAX_BYTES, ID, KINDS, NOTES };

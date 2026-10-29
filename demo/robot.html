@@ -88,13 +88,41 @@
   .card.note { margin-top: 18px; font-size: 18px; font-weight: 700; }
   .card.note small { display: block; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--gray); }
 
+  .gbar { margin-top: 18px; height: 14px; border-radius: 7px; background: var(--soft); overflow: hidden; }
+  .gbar i { display: block; height: 100%; width: 0; background: var(--green); transition: width .5s; }
+
+  /* Order food: category tabs, item grid with +/- */
+  .order { height: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .order .seg button { min-height: 52px; display: flex; flex-direction: column; justify-content: center; line-height: 1.15; }
+  .order .seg button b { font-size: 17px; } .order .seg button small { font-size: 12px; opacity: .7; }
+  .menu-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 12px; }
+  .mi { min-height: 0; display: flex; flex-direction: column; border-radius: 18px; background: var(--card); border: 2px solid var(--line); overflow: hidden; }
+  .mi.on { border-color: var(--green); }
+  .mi .img { flex: 1; min-height: 16px; background: repeating-linear-gradient(135deg, #e3ebe6 0 10px, #eef3f0 10px 20px); }
+  .mi .t { padding: 8px 12px 0; display: grid; } .mi .t b { font-size: 18px; font-weight: 900; } .mi .t small { color: var(--gray); font-weight: 700; }
+  .mi .q { display: flex; align-items: center; gap: 8px; padding: 6px 12px 10px; }
+  .mi .q .pr { margin-right: auto; font: 500 15px var(--mono); }
+  .mi .q button { width: 44px; height: 44px; border-radius: 12px; border: 2px solid var(--line); background: var(--card); font-size: 22px; font-weight: 900; }
+  .mi .q button.plus { background: var(--mint); border-color: var(--mint); }
+  .mi .q span { min-width: 22px; text-align: center; font-size: 18px; font-weight: 900; }
+
+  /* Pay: bill | QR */
+  .pay { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: center; }
+  .bill table { width: 100%; border-collapse: collapse; font-size: 18px; }
+  .bill td { padding: 8px 0; border-bottom: 1px solid var(--line); } .bill td + td { text-align: right; font-family: var(--mono); }
+  .bill tr.tot td { border: 0; font-size: 24px; font-weight: 900; }
+  .qr { display: grid; gap: 10px; justify-items: center; text-align: center; }
+  .qr img { width: 100%; max-width: 300px; border-radius: 18px; background: #fff; }
+  .qr .acct { font-size: 18px; font-weight: 800; } .qr .amt { font-size: 32px; font-weight: 900; }
+
   /* Standby at a station: choose task, choose tables */
   .load { height: 100%; display: flex; flex-direction: column; gap: 14px; }
   .step { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .step h2 { margin: 0; font-size: 20px; font-weight: 900; }
   .step h2 small { font-size: 15px; font-weight: 700; color: var(--gray); }
   .step .count { margin-left: auto; font: 500 18px var(--mono); }
-  .choice { display: inline-flex; flex-direction: column; padding: 10px 22px; border-radius: 16px; background: var(--deep); color: var(--mint); line-height: 1.15; }
+  .choice { display: inline-flex; flex-direction: column; padding: 10px 22px; border-radius: 16px; border: 2px solid var(--line); background: var(--card); color: var(--deep); line-height: 1.15; }
+  .choice[aria-pressed=true] { background: var(--deep); border-color: var(--deep); color: var(--mint); }
   .choice b { font-size: 20px; font-weight: 900; } .choice small { font-size: 13px; opacity: .7; }
   .load .tt-grid { flex: 1; min-height: 240px; }
 
@@ -116,7 +144,11 @@
     .split .lead { margin-inline: auto; }
     .moving { grid-template-columns: minmax(0, 1fr); align-content: center; }
     .dest { font-size: 96px; font-size: min(96px, 100cqw / (var(--n) * .64)); }
+    .menu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pay { grid-template-columns: minmax(0, 1fr); align-content: center; }
   }
+  :root[data-orient=portrait] .pay { grid-template-columns: minmax(0, 1fr); align-content: center; }
+  :root[data-orient=portrait] .menu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   :root[data-orient=portrait] .screen > .body { grid-template: minmax(0, 1fr) auto / minmax(0, 1fr); }
   :root[data-orient=portrait] #acts { flex-direction: row; flex-wrap: wrap; border-left: 0; border-top: 1px solid var(--line); padding: 16px; }
   :root[data-orient=portrait] #acts > * { flex: 1 1 220px; }
@@ -182,7 +214,10 @@ function face(mood, move) {
 }
 $('startFace').innerHTML = face('happy');
 
-let pick = [];   // tables chosen while on standby at a station
+let guiding = false, gpick = null, g0 = {};   // guide: choosing the guests' table; longest route seen per mission (progress bar)
+let paying = false;   // pay screen open
+let ordering = false, cart = {}, ocat = null, otable = null;   // order food: open, qty per item id, category tab, table picked (robot not at one)
+let pick = [], mode = 'deliver';   // tables chosen while on standby at a station; deliver | bus (one table)
 const act = (cls, vi, en, dataAct, extra = '') => `<button class="act ${cls}" data-act="${dataAct}" ${extra}>${L(vi, en)}</button>`;
 // Two-tap button: first tap arms it (label changes), second tap runs (see click handler).
 // Each screen has its own key so an armed button never carries over to the next screen.
@@ -215,6 +250,63 @@ function routeList(m) {
 // Orchestrator flags `charging` as soon as battery < lowBattery, even mid-job ("về sạc sau việc này"), so test the level itself.
 const lowBat = r => r.battery < App.site.timing.lowBattery;
 const batChip = r => lowBat(r) ? `<div class="chips"><span class="pill danger">Pin ${Math.round(r.battery)}% · về sạc sau việc này</span></div>` : '';
+
+// Guests can be led to a table from where they wait: standby at a station / the entrance, or idle at the entrance (spec 6.2).
+function canGuide(r, m) {
+  if (!feat('guide') || r.halt || r.offline) return false;
+  const P = App.site.points, s = m && r.phase === 'atStop' && m.stops[m.cur];
+  return s ? s.a === 'standby' && ['station', 'entrance'].includes((P[s.p] || {}).kind) : !m && r.phase === 'idle' && (P[r.at] || {}).kind === 'entrance';
+}
+const guideBtn = (r, m) => canGuide(r, m) ? act('primary', 'Dẫn tôi tới bàn', 'Guide me to a table', 'guide') : '';
+const tablesOf = () => Object.keys(App.site.points).filter(k => App.site.points[k].kind === 'table');
+// Order food (spec 6.3): wherever the robot stands still; the table is where it stands, else the guest picks one.
+const menu = () => App.site.menu || { cats: [], items: [] };
+const canOrder = r => feat('order') && menu().items.length > 0 && !r.halt && !r.offline && ['idle', 'atStop'].includes(r.phase);
+const orderBtn = r => canOrder(r) ? act('outline', 'Gọi món', 'Order food', 'order') : '';
+const hereTable = r => r.phase === 'atStop' && (App.site.points[r.at] || {}).kind === 'table' ? r.at : null;
+function orderView(r) {
+  const t = hereTable(r) || otable;
+  if (!t) return { bar: 'Gọi món · Chọn bàn', sub: 'Order · Choose your table', tone: 'go',
+    body: `<div class="load"><div class="step"><h2>Quý khách ngồi bàn nào? <small>Which table are you seated at?</small></h2></div>
+      <div class="tt-grid cols6">${tablesOf().map(x => `<button class="tt" data-ot="${x}"><span class="lbl">Bàn</span><b>${esc(short(x))}</b></button>`).join('')}</div></div>`,
+    acts: act('outline', 'Quay lại', 'Back', 'orderBack') };
+  const M = menu(), cat = M.cats.some(c => c.id === ocat) ? ocat : (M.cats[0] || {}).id;
+  const lines = M.items.filter(i => cart[i.id]), n = lines.reduce((a, i) => a + cart[i.id], 0), total = lines.reduce((a, i) => a + cart[i.id] * i.price, 0);
+  return { bar: `${pname(t)} · Gọi món`, sub: 'Order food', tone: 'go',
+    body: `<div class="order"><div class="seg">${M.cats.map(c => `<button data-cat="${esc(c.id)}" aria-pressed="${c.id === cat}">${L(esc(c.vi), esc(c.en))}</button>`).join('')}</div>
+      <div class="menu-grid">${M.items.filter(i => i.cat === cat).map(i => `<div class="mi${cart[i.id] ? ' on' : ''}"><div class="img"></div>
+        <div class="t"><b>${esc(i.vi)}</b><small>${esc(i.en)}</small></div>
+        <div class="q"><span class="pr">${vnd(i.price)}</span>${cart[i.id] ? `<button data-qty="${esc(i.id)}" data-d="-1" aria-label="Bớt">−</button><span>${cart[i.id]}</span>` : ''}<button class="plus" data-qty="${esc(i.id)}" data-d="1" aria-label="Thêm">+</button></div></div>`).join('')}</div></div>`,
+    acts: info(`Giỏ · ${n} món · ${vnd(total)}`, lines.length ? lines.map(i => `${esc(i.vi)} ×${cart[i.id]}`).join(' · ') : 'Chạm + để chọn món · Tap + to add')
+      + act('primary', n ? `Gửi bếp ${n} món` : 'Chưa chọn món', n ? 'Send to kitchen' : 'Nothing yet', 'orderSend', n ? '' : 'disabled')
+      + act('outline', 'Quay lại', 'Back', 'orderBack') };
+}
+// Pay at the table (spec 6.4): bill = this table's orders not yet reported paid. Needs features.call to reach staff.
+const bill = t => ((App.state && App.state.orders) || []).filter(o => o.table === t && o.status === 'new');
+const canPay = r => feat('pay') && feat('call') && !r.halt && !r.offline && !!hereTable(r) && bill(hereTable(r)).length > 0;
+const payBtn = r => canPay(r) ? act('outline', 'Thanh toán', 'Pay the bill', 'pay') : '';
+function payView(r) {
+  const t = hereTable(r), orders = bill(t), M = menu(), P = App.site.payment || {};
+  const lines = {};
+  for (const o of orders) for (const i of o.items) { const l = lines[i.id] = lines[i.id] || { qty: 0, sum: 0 }; l.qty += i.qty; l.sum += i.qty * i.price; }
+  const total = orders.reduce((a, o) => a + o.total, 0), name = id => (M.items.find(i => i.id === id) || { vi: id }).vi;
+  const info2 = `Ban ${short(t)}`;
+  const qr = navigator.onLine && P.bank && P.account
+    ? `<img src="https://img.vietqr.io/image/${encodeURIComponent(P.bank)}-${encodeURIComponent(P.account)}-compact2.png?amount=${total}&addInfo=${encodeURIComponent(info2)}&accountName=${encodeURIComponent(P.name || '')}" alt="Mã VietQR">`
+    : P.qr ? `<img src="${esc(P.qr)}" alt="Mã QR chuyển khoản">` : '';
+  return { bar: `${pname(t)} · Thanh toán`, sub: 'Pay the bill', tone: 'go',
+    body: `<div class="pay"><div class="card bill"><p class="eyebrow">Hoá đơn · Bill — ${esc(pname(t))}</p><table>
+      ${Object.entries(lines).map(([id, l]) => `<tr><td>${esc(name(id))} ×${l.qty}</td><td>${vnd(l.sum)}</td></tr>`).join('')}
+      <tr class="tot"><td>Tổng · Total</td><td>${vnd(total)}</td></tr></table></div>
+      <div class="qr">${qr}<div class="amt">${vnd(total)}</div>
+        <div class="acct">${P.account ? `${esc(P.bank)} · ${esc(P.account)}${P.name ? ' · ' + esc(P.name) : ''}` : 'Vui lòng thanh toán với nhân viên · Please pay staff'}</div>
+        <small class="muted">Nội dung · Note: ${esc(info2)}</small></div></div>`,
+    acts: act('primary', 'Tôi đã chuyển khoản', "I've paid", 'paid', `data-amt="${total}"`)
+      + act('outline', 'Tiền mặt / thẻ', 'Cash or card · call staff', 'call', `data-p="${esc(t)}"`)
+      + act('outline', 'Quay lại', 'Back', 'payBack') };
+}
+// Call staff to a table (spec 6.1): needs features.call.
+const callBtn = t => feat('call') && t ? act('outline', 'Gọi nhân viên', 'Call staff', 'call', `data-p="${esc(t)}"`) : '';
 
 // Each state -> { bar, sub: app-bar title + English line, tone, body: content column, acts: action zone }.
 function view(r, m) {
@@ -251,13 +343,23 @@ function view(r, m) {
     body: split(face('sad'), 'Mất kết nối · Offline', 'Mất kết nối robot.', 'Robot connection lost.', '<p class="lead">Đang chờ robot kết nối lại hệ thống…</p>'),
     acts: info('Mất kết nối', 'Đang chờ robot kết nối lại · Waiting for the robot to reconnect') };
 
+  if (paying && canPay(r)) return payView(r);
+  if (ordering && canOrder(r)) return orderView(r);
+  if (guiding && canGuide(r, m)) return { bar: 'Dẫn khách · Chọn bàn', sub: 'Guide · Choose a table', tone: 'go',
+    body: `<div class="load"><div class="step"><h2>Quý khách ngồi bàn nào? <small>Which table are you seated at?</small></h2></div>
+      <div class="tt-grid cols6">${tablesOf().map(t => `<button class="tt" data-g="${t}" aria-pressed="${gpick === t}"><span class="lbl">Bàn</span><b>${esc(short(t))}</b></button>`).join('')}</div></div>`,
+    acts: act('primary', gpick ? `Đi tới Bàn ${esc(short(gpick))}` : 'Chọn bàn', gpick ? 'Follow me' : 'Pick a table', 'guideGo', gpick ? '' : 'disabled')
+      + act('outline', 'Quay lại', 'Back', 'guideBack') };
   if (r.phase === 'atStop' && m) {
     const s = m.stops[m.cur], place = pname(s.p);
+    if (s.a === 'guide') return { bar: `${place} · Đã tới`, sub: "We're here", tone: 'ok',
+      body: split(face('happy'), 'Dẫn khách · Guide', `Đã tới ${esc(place)}.`, `This is ${esc(place)}. Enjoy your meal!`, '<p class="lead" id="timer"></p>'),
+      acts: act('primary', 'Đã tới bàn', "We're here", 'confirm') + callBtn(s.p) };
     if (s.a === 'handoff') return { bar: `${place} · Giao món đến`, sub: 'Your order is here', tone: lowBat(r) ? 'warn' : 'ok',
       body: split(trays([s.tray], trayLabels(m)), `${esc(place)} · Đã tới`, `Mời quý khách lấy món ở Khay ${s.tray}`, `Please take your order from Tray ${s.tray}`,
         `${m.note ? `<div class="card note"><small>Ghi chú · Note</small>${esc(m.note)}</div>` : ''}<p class="lead" id="timer"></p>${batChip(r)}`, 'hand'),
       acts: act('primary', 'Đã nhận món', 'Got it, thanks', 'confirm')
-        + armAct('cx', 'warn', ['Trả lại bếp', 'Not mine, send back'], ['Chạm lần nữa · robot mang món về', 'Tap again to send it back'], 'cancelStop') };
+        + armAct('cx', 'warn', ['Trả lại bếp', 'Not mine, send back'], ['Chạm lần nữa · robot mang món về', 'Tap again to send it back'], 'cancelStop') + orderBtn(r) + payBtn(r) + callBtn(s.p) };
     if (s.a === 'load') {
       const open = m.stops.filter(x => x.a === 'handoff' && !isOff(x)).map(x => x.tray);
       return { bar: `${place} · Xếp món lên khay`, sub: 'Load the trays', tone: 'go',
@@ -283,21 +385,35 @@ function view(r, m) {
       const toDish = s.p !== App.site.dishPoint && act('outline', 'Mang chén về khu rửa', 'Take dishes to wash', 'toDish');
       if (App.site.points[s.p].kind !== 'station') return { bar: `${place} · Chờ lệnh`, sub: 'Standby', tone: 'go',
         body: split(face('wait'), `${esc(place)} · Chờ lệnh`, 'Robot đang chờ.', 'Robot is waiting.', `<p class="lead">Gọi bởi ${esc(m.by)}</p>`),
-        acts: (toDish || '') + act('primary', 'Xong · Cho robot về', 'Done · Send robot back', 'release') };
+        acts: guideBtn(r, m) + orderBtn(r) + payBtn(r) + (toDish || '') + act('primary', 'Xong · Cho robot về', 'Done · Send robot back', 'release') };
       const tables = Object.keys(App.site.points).filter(k => App.site.points[k].kind === 'table');
       return { bar: `${place} · Chờ lệnh`, sub: 'Choose tables', tone: 'go',
         body: `<div class="load"><p class="eyebrow">Gọi bởi ${esc(m.by)}</p>
-          <div class="step"><h2>1 · Chọn việc <small>Choose task</small></h2><div class="choice" aria-current="true">${L('Giao món', 'Deliver')}</div></div>
-          <div class="step"><h2>2 · Chọn bàn <small>Choose tables</small></h2><span class="count">${pick.length}/${App.site.trays} khay</span></div>
+          <div class="step"><h2>1 · Chọn việc <small>Choose task</small></h2>${[['deliver', 'Giao món', 'Deliver'], ['bus', 'Thu dọn bàn', 'Bus a table']].map(([k, vi, en]) =>
+            `<button class="choice" data-mode="${k}" aria-pressed="${mode === k}">${L(vi, en)}</button>`).join('')}</div>
+          <div class="step"><h2>2 · Chọn bàn <small>${mode === 'bus' ? 'Choose a table' : 'Choose tables'}</small></h2><span class="count">${mode === 'bus' ? pick.length + '/1 bàn' : `${pick.length}/${App.site.trays} khay`}</span></div>
           <div class="tt-grid cols6">${tables.map(t => {
             const [txt, cls] = tableState(t), i = pick.indexOf(t);
-            return `<button class="tt ${cls}" data-t="${t}" aria-pressed="${i >= 0}"><span class="lbl">Bàn</span><b>${esc(short(t))}</b><span class="st">${esc(txt)}</span>${i >= 0 ? `<span class="tag">✓ K${i + 1}</span>` : ''}</button>`;
+            return `<button class="tt ${cls}" data-t="${t}" aria-pressed="${i >= 0}"><span class="lbl">Bàn</span><b>${esc(short(t))}</b><span class="st">${esc(txt)}</span>${i >= 0 ? `<span class="tag">✓${mode === 'bus' ? '' : ' K' + (i + 1)}</span>` : ''}</button>`;
           }).join('')}</div></div>`,
-        acts: trays(pick.map((_, i) => i + 1), nTrays().map(i => pick[i - 1] ? 'Bàn ' + short(pick[i - 1]) : 'trống'))
-          + act('primary', pick.length ? `Đi giao ${pick.length} bàn` : 'Chọn bàn để giao', pick.length ? 'Go deliver' : 'Pick tables', 'dispatch', pick.length ? '' : 'disabled')
+        acts: (mode === 'bus' ? info('Thu dọn bàn', `Robot tới bàn thu chén đĩa rồi mang về ${esc(pname(App.site.dishPoint))} · Collects dishes, then to the dish area`)
+            + act('primary', pick.length ? `Đi thu dọn Bàn ${esc(short(pick[0]))}` : 'Chọn bàn để thu dọn', pick.length ? 'Go bus table' : 'Pick a table', 'dispatch', pick.length ? '' : 'disabled')
+          : trays(pick.map((_, i) => i + 1), nTrays().map(i => pick[i - 1] ? 'Bàn ' + short(pick[i - 1]) : 'trống'))
+            + act('primary', pick.length ? `Đi giao ${pick.length} bàn` : 'Chọn bàn để giao', pick.length ? 'Go deliver' : 'Pick tables', 'dispatch', pick.length ? '' : 'disabled'))
           + act('outline', 'Bỏ chọn', 'Clear', 'unpick', pick.length ? '' : 'disabled')
-          + act('outline', 'Về trạm sạc', 'Dock', 'release') + (toDish || '') };
+          + act('outline', 'Về trạm sạc', 'Dock', 'release') + (toDish || '') + guideBtn(r, m) + orderBtn(r) };
     }
+  }
+  if (r.phase === 'toStop' && m && m.stops[m.cur].a === 'guide') {
+    const place = pname(m.stops[m.cur].p);
+    return { bar: `Dẫn khách → ${place}`, sub: 'Please follow me', tone: lowBat(r) ? 'warn' : 'go',
+      body: `<div class="moving"><div class="mv"><div class="mvhead">${face('go', true)}<div><p class="eyebrow">Mời quý khách đi theo tôi · Please follow me</p><p>${esc(m.label)}</p></div></div>
+        <p class="dest" style="--n:${Math.max(3, place.length)}">${esc(place)}</p><p id="timer"></p><div class="gbar"><i id="gbar"></i></div>
+        <div class="yield">Xin quý khách đi sau robot · Please walk behind the robot</div>${batChip(r)}</div></div>`,
+      acts: info(r.slow ? 'Đang đi chậm' : 'Đang dẫn đường', 'Robot tự dừng khi có người hoặc vật cản · Stops for people and obstacles')
+        + (r.slow ? act('outline', 'Đi bình thường', 'Normal speed', 'speed') : act('outline', 'Đi chậm hơn', 'Slower please', 'speed'))
+        + callBtn(m.stops[m.cur].p)
+        + armAct('cg', 'danger', ['Huỷ dẫn đường', 'Cancel'], ['Chạm lần nữa để huỷ', 'Tap again to cancel'], 'cancel') };
   }
   if (r.phase === 'toStop' && m) {
     const s = m.stops[m.cur], place = pname(s.p);
@@ -327,15 +443,24 @@ function view(r, m) {
   return { bar: `Robot ${ID} · ${dock}`, sub: 'Ready', tone: 'ok',
     body: split(face('happy'), `MEKONIQ Serve · ${esc(ID)}`, 'Xin chào!', 'Hello!',
       `<div class="chips"><span class="pill">${free} khay trống · ${free} trays free</span><span class="pill ok">Sẵn sàng · Ready</span></div><p class="lead">Chờ nhiệm vụ từ các trạm.</p>`, 'hello'),
-    acts: act('dark', 'Nhân viên', 'Staff', 'staff') };
+    acts: guideBtn(r, m) + orderBtn(r) + act('dark', 'Nhân viên', 'Staff', 'staff') };
 }
 
-let r = null, m = null;
+let r = null, m = null, lastDest = null;
 function render() {
   if (!App.state) return;
   r = App.state.robots.find(x => x.id === ID);
   m = missionOf(r);
-  if (!(r && r.phase === 'atStop' && m && m.stops[m.cur].a === 'standby')) pick = [];
+  // A station moved the current table while we drive (retarget): tell whoever watches the screen.
+  const dest = r && r.phase === 'toStop' && m ? m.id + ':' + m.cur + ':' + m.stops[m.cur].p : null;
+  if (dest && lastDest && dest !== lastDest && dest.split(':').slice(0, 2).join() === lastDest.split(':').slice(0, 2).join())
+    toast(`Đổi đích → ${pname(m.stops[m.cur].p)} · New destination`);
+  lastDest = dest;
+  if (!(r && r.phase === 'atStop' && m && m.stops[m.cur].a === 'standby')) { pick = []; mode = 'deliver'; }
+  if (!r || !canGuide(r, m)) { guiding = false; gpick = null; }
+  if (!r || !canOrder(r)) { ordering = false; cart = {}; otable = null; }
+  if (!r || !canPay(r)) paying = false;
+  if (r && m && m.kind === 'guide' && r.phase === 'toStop') g0[m.id] = Math.max(g0[m.id] || 0, r.rem || 0);
   const v = view(r, m);
   document.body.className = 't-' + v.tone;
   $('bar').textContent = v.bar;
@@ -356,14 +481,25 @@ function tick() {
   const t = $('timer');
   if (!t || !r) return;
   if (r.phase === 'toStop') { const n = etaSec(r); t.textContent = isValetudo() ? '' : n ? `Còn khoảng ${n} giây · ~${n} s` : 'Sắp tới · Arriving'; }   // Valetudo reports no remaining route
+  const gb = $('gbar');
+  if (gb && m && g0[m.id]) gb.style.width = Math.round(100 * (1 - (r.rem || 0) / g0[m.id])) + '%';
   if (r.phase === 'atStop') { const n = Math.max(0, App.site.timing.handoffSec - Math.round((serverNow() - r.waitSince) / 1000)); t.textContent = `Robot tự quay về sau ${n} giây · Returns in ${n} s`; }
 }
 
 $('main').addEventListener('click', e => {
+  const q = e.target.closest('[data-qty]'), ot = e.target.closest('[data-ot]'), oc = e.target.closest('[data-cat]');
+  if (q) { const id = q.dataset.qty; cart[id] = Math.max(0, Math.min(20, (cart[id] || 0) + +q.dataset.d)); if (!cart[id]) delete cart[id]; return render(); }
+  if (ot) { otable = ot.dataset.ot; return render(); }
+  if (oc) { ocat = oc.dataset.cat; return render(); }
+  const g = e.target.closest('[data-g]');
+  if (g) { gpick = gpick === g.dataset.g ? null : g.dataset.g; return render(); }
+  const md = e.target.closest('[data-mode]');
+  if (md) { mode = md.dataset.mode; pick = []; return render(); }
   const t = e.target.closest('[data-t]');
   if (t) {
     const id = t.dataset.t;
     if (pick.includes(id)) pick = pick.filter(x => x !== id);
+    else if (mode === 'bus') pick = [id];
     else if (pick.length < App.site.trays) pick.push(id);
     else toast(`Robot chỉ có ${App.site.trays} khay · ${App.site.trays} trays only`, 'warn');
     return render();
@@ -384,10 +520,29 @@ $('main').addEventListener('click', e => {
   if (a === 'pause') { send({ type: 'pause', ...base }); toast('Đã tạm dừng · Paused'); }
   if (a === 'manual') armed('man', () => send({ type: 'manual', ...base }), render);
   if (a === 'clear') send({ type: 'clear', ...base });
-  if (a === 'dispatch') { send({ type: 'dispatch', ...base, mission: m.id, tables: pick }); pick = []; }
+  if (a === 'dispatch') { send({ type: 'dispatch', ...base, mission: m.id, tables: pick, bus: mode === 'bus' }); pick = []; }
   if (a === 'unpick') { pick = []; render(); }
   if (a === 'toDish') send({ type: 'dispatch', ...base, mission: m.id, toDish: true });
   if (a === 'release') send({ type: 'dispatch', ...base, mission: m.id, release: true });
+  if (a === 'pay') { paying = true; render(); }
+  if (a === 'payBack') { paying = false; render(); }
+  if (a === 'paid') {
+    const t = hereTable(r);
+    send({ type: 'call', point: t, what: 'paid', amount: +b.dataset.amt, by: 'Khách ' + pname(t) + ' (màn ' + ID + ')' });
+    toast('Cảm ơn quý khách! Nhân viên sẽ xác nhận · Thank you!'); paying = false; render();
+  }
+  if (a === 'order') { ordering = true; cart = {}; otable = null; render(); }
+  if (a === 'orderBack') { ordering = false; render(); }
+  if (a === 'orderSend') {
+    const t = hereTable(r) || otable, items = Object.entries(cart).map(([id, qty]) => ({ id, qty }));
+    if (t && items.length) { send({ type: 'order', table: t, items, by: 'Khách ' + pname(t) + ' (màn ' + ID + ')' }); toast('Đã gửi bếp · Sent to the kitchen'); }
+    ordering = false; cart = {}; render();
+  }
+  if (a === 'guide') { guiding = true; gpick = null; render(); }
+  if (a === 'guideBack') { guiding = false; render(); }
+  if (a === 'guideGo' && gpick) { send({ type: 'create', kind: 'guide', to: gpick, ...base, by: 'Khách (màn ' + ID + ')' }); guiding = false; gpick = null; }
+  if (a === 'speed') { send({ type: 'speed', ...base, slow: !r.slow }); toast(r.slow ? 'Đi bình thường · Normal speed' : 'Đi chậm hơn · Slowing down'); }
+  if (a === 'call') { send({ type: 'call', point: b.dataset.p, what: 'staff', by: 'Khách ' + pname(b.dataset.p) + ' (màn ' + ID + ')' }); toast('Đã gọi nhân viên · Staff called'); }
   if (a === 'staff') toast('Gọi robot từ máy trạm · Call the robot from a station');
 });
 
