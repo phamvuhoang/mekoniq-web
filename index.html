@@ -9,207 +9,25 @@
 <meta property="og:description" content="Robot giao món trong nhà hàng: điều phối từ nhiều trạm, xử lý huỷ món và sự cố rõ ràng. Xem demo tương tác.">
 <meta name="theme-color" content="#071d21">
 <link rel="icon" href="demo/logo.svg">
-<style>
-  :root { --dark: #071d21; --deep: #0d2b2e; --ink: #143034; --gray: #547078; --light: #edf4f0; --pale: #f6f8f4; --mint: #b9fb75; --green: #2b8169;
-    --line: #d9e5de; --orange: #ff9f68; --blue: #63dcc5; --radius: 19px; }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; scroll-padding-top: 84px; }
-  body { margin: 0; color: var(--ink); background: var(--pale); font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
-  a { color: inherit; text-decoration: none; }
-  button, input, select, textarea { font: inherit; }
-  button { cursor: pointer; }
-  .container { width: min(1210px, calc(100% - 58px)); margin: auto; }
-  h1, h2, h3, p { margin-top: 0; }
-  h1, h2, h3 { line-height: 1.12; letter-spacing: -.05em; }
-  h2 { font-size: clamp(36px, 4.6vw, 62px); margin-bottom: 20px; }
-  h3 { font-size: 22px; letter-spacing: -.026em; margin-bottom: 10px; }
-  .eyebrow { display: flex; align-items: center; gap: 9px; text-transform: uppercase; letter-spacing: .145em; font-size: 11px; font-weight: 900; color: #357b6a; margin-bottom: 19px; }
-  .eyebrow:before { content: ""; width: 23px; height: 2px; background: currentColor; }
-  .dark .eyebrow, .hero .eyebrow { color: var(--mint); }
-  .lead { font-size: clamp(18px, 2vw, 21px); line-height: 1.56; color: #4c6b6e; }
-  .muted { color: var(--gray); }
-  .small { font-size: 12px; }
-
-  /* Nav */
-  .top { position: sticky; top: 0; z-index: 100; background: rgba(247, 250, 246, .94); backdrop-filter: blur(17px); border-bottom: 1px solid #dce5df; }
-  .nav { height: 72px; display: flex; justify-content: space-between; align-items: center; gap: 14px; }
-  .identity { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
-  .identity img { width: 42px; height: 42px; }
-  .wordmark { font-weight: 950; letter-spacing: -.06em; font-size: 23px; line-height: 1; }
-  .wordmark span { color: var(--green); }
-  .identity small { display: block; letter-spacing: .2em; color: #68847e; text-transform: uppercase; font-size: 9px; font-weight: 850; margin-top: 6px; }
-  .navlinks { display: flex; gap: 22px; align-items: center; }
-  .navlinks a { font-size: 13px; font-weight: 800; color: #57726c; }
-  .navlinks a:hover { color: #1f7064; }
-  .btn { border: 1px solid #bfd5c9; border-radius: 999px; padding: 11px 18px; background: transparent; color: var(--ink); font-size: 13px; font-weight: 850;
-    display: inline-flex; align-items: center; justify-content: center; gap: 7px; transition: transform .2s, background .2s; white-space: nowrap; }
-  .btn:hover { transform: translateY(-2px); }
-  .btn.primary { background: var(--mint); border-color: var(--mint); color: var(--dark); }
-  .btn.darkbtn { background: var(--dark); border-color: var(--dark); color: #fff; }
-  .btn.outline-light { color: #fff; border-color: #688782; }
-  .btn.big { padding: 15px 24px; font-size: 14px; }
-
-  /* Hero (from the concept landing in the company blueprint) */
-  .hero { background: #09282b; color: #fff; position: relative; overflow: hidden; }
-  .hero:after { position: absolute; content: ""; height: 760px; width: 760px; border: 1px solid #5e877435; border-radius: 50%; right: -360px; top: -230px; pointer-events: none; }
-  .hero-grid { position: relative; z-index: 1; min-height: 640px; padding: 80px 0; display: grid; grid-template-columns: 1.1fr .9fr; gap: 20px; align-items: center; }
-  .hero h1 { font-size: clamp(48px, 6.5vw, 88px); margin: 12px 0 24px; }
-  .hero h1 em { font-style: normal; color: var(--mint); }
-  .hero p { color: #c0d7cd; font-size: 19px; max-width: 560px; }
-  .hero-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 32px; }
-  .hero-meta { display: flex; gap: 30px; flex-wrap: wrap; padding-top: 22px; border-top: 1px solid #395656; margin-top: 48px; color: #9abbb2; font-size: 12px; }
-  .hero-meta b { display: block; color: #f5fff8; font-size: 15px; }
-  .visual { min-height: 480px; position: relative; display: flex; align-items: center; justify-content: center; }
-  .ring { position: absolute; border: 1px solid #729c8147; border-radius: 50%; width: 460px; height: 460px; animation: spin 40s linear infinite; }
-  .ring.two { width: 350px; height: 350px; border-color: #b9fb753b; border-style: dashed; animation-direction: reverse; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .robot { width: 230px; height: 398px; position: relative; transform: rotate(-5deg); filter: drop-shadow(20px 30px 27px #0007); z-index: 2; animation: bob 4s ease-in-out infinite; }
-  @keyframes bob { 50% { transform: rotate(-5deg) translateY(-8px); } }
-  .robot .head { position: absolute; z-index: 3; top: 4px; left: 21px; width: 188px; height: 98px; border: 8px solid #e9f5e7; background: #c1d5ce; border-radius: 37px 37px 27px 27px; }
-  .robot .face { position: absolute; inset: 14px; background: #0c3438; border-radius: 19px; display: flex; gap: 29px; align-items: center; justify-content: center; }
-  .robot .eye { width: 13px; height: 13px; background: var(--mint); border-radius: 100%; box-shadow: 0 0 15px #c3ff80; animation: blink 5s infinite; }
-  @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
-  .robot .body { position: absolute; top: 91px; left: 44px; width: 144px; height: 247px; background: linear-gradient(90deg, #c3d8d0, #f5fff5 40%, #8baea4); border-radius: 23px; }
-  .robot .tray { position: absolute; z-index: 5; left: -8px; width: 248px; height: 27px; border-radius: 14px; background: linear-gradient(#739b91, #284b4f); border: 5px solid #a3c5b6; box-shadow: 0 7px 3px #153b3d77; }
-  .robot .t1 { top: 147px; } .robot .t2 { top: 225px; } .robot .t3 { top: 303px; }
-  .robot .base { position: absolute; bottom: 12px; left: 5px; width: 222px; height: 66px; border-radius: 36px; background: linear-gradient(130deg, #d0e2d9, #67857a); border-bottom: 12px solid #284e50; }
-  .robot .wheel { position: absolute; bottom: 5px; background: #10363c; width: 43px; height: 24px; border-radius: 12px; }
-  .robot .wa { left: 32px; } .robot .wb { right: 33px; }
-  .float { position: absolute; z-index: 8; background: #f7fff2; padding: 12px 15px; border: 1px solid #d1edd0; border-radius: 12px; color: #1c4a3c; box-shadow: 0 20px 40px #071d2155; font-weight: 900; font-size: 12px; }
-  .float.one { right: -7px; top: 85px; }
-  .float.two { left: 2px; bottom: 45px; }
-  .float.three { right: 10px; bottom: 120px; background: #fff3e4; border-color: #efd2a6; color: #8d622f; }
-  .float i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #63b977; box-shadow: 0 0 0 4px #d8f0dc; margin-right: 7px; }
-  @media (prefers-reduced-motion: reduce) { .ring, .robot, .robot .eye { animation: none; } html { scroll-behavior: auto; } }
-
-  /* Sections */
-  .section { padding: 92px 0; border-bottom: 1px solid var(--line); }
-  .section.tint { background: #e9f0e9; }
-  .section.dark { background: var(--dark); color: #fff; border-color: #234042; }
-  .section.dark p { color: #bad0ca; }
-  .section-head { display: flex; justify-content: space-between; gap: 28px; align-items: flex-end; margin-bottom: 34px; }
-  .section-head p { max-width: 440px; margin: 0; color: var(--gray); }
-  .dark .section-head p { color: #bad0ca; }
-  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
-  .cols3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  .cols4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
-  .card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; min-width: 0; }
-  .card p { color: #58746e; margin-bottom: 0; }
-  .card.darkcard { background: #183b3c; color: #f5fff8; border-color: #345b53; }
-  .card.darkcard p { color: #b4cec4; }
-  .iconbox { width: 50px; height: 50px; border-radius: 13px; background: #e4f1e5; display: grid; place-items: center; font-size: 22px; margin-bottom: 16px; }
-  .darkcard .iconbox { background: #234a4a; }
-  .steps { counter-reset: s; display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
-  .step { background: #fff; border: 1px solid var(--line); padding: 27px; border-radius: 17px; }
-  .step:before { counter-increment: s; content: "0" counter(s); display: block; color: var(--green); font-size: 12px; font-weight: 950; margin-bottom: 17px; }
-  .step p { color: #687c73; font-size: 14px; margin: 0; }
-  .callout { background: #e1efdf; border: 1px solid #bfdbbc; border-radius: 16px; padding: 24px; }
-  .callout.warn { background: #fff1e7; border-color: #f1d0b7; }
-  .callout h3 { margin: 0 0 8px; }
-  .callout p { margin: 0; }
-
-  /* Fallback table */
-  .cases { display: grid; gap: 10px; }
-  .case { display: grid; grid-template-columns: 1fr 1.4fr; gap: 20px; align-items: center; padding: 18px 22px; border-radius: 16px; background: #10302f; border: 1px solid #284a48; }
-  .case b { font-size: 16px; color: #fff; }
-  .case span { color: #bad0ca; font-size: 14px; }
-  .case span strong { color: var(--mint); font-weight: 800; }
-
-  /* Demo block */
-  .demo { display: grid; grid-template-columns: 1fr 1.1fr; gap: 28px; align-items: center; }
-  .screens { position: relative; min-height: 380px; }
-  .scr { position: absolute; border-radius: 18px; box-shadow: 0 30px 60px #071d2133; overflow: hidden; border: 1px solid var(--line); background: #fff; font-size: 12px; }
-  .scr .bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-weight: 900; }
-  .scr .bar img { width: 20px; }
-  .scr.station { inset: 0 18% 12% 0; }
-  .scr.robotscr { right: 0; bottom: 0; width: 46%; background: var(--dark); color: #fff; border-color: #234042; }
-  .scr.robotscr .bar { border-color: #234042; }
-  .map { display: grid; grid-template-columns: 80px 1fr; gap: 10px; padding: 14px; }
-  .zones { display: grid; gap: 8px; }
-  .zones div { border-radius: 8px; padding: 10px 6px; text-align: center; font-weight: 800; font-size: 11px; background: #e9f9d9; }
-  .zones div:nth-child(2) { background: #dff5f0; }
-  .tbls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; align-content: center; }
-  .tbls span { border: 1.5px solid #9db3ab; border-radius: 7px; text-align: center; padding: 8px 0; font-weight: 900; }
-  .tbls span.on { border-color: var(--green); border-width: 2.5px; }
-  .tbls span.r { background: var(--mint); border-color: var(--dark); }
-  .mrow { margin: 0 14px 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; display: flex; justify-content: space-between; gap: 8px; }
-  .mrow em { font-style: normal; background: #e4f6f2; border-radius: 99px; padding: 0 8px; font-weight: 800; }
-  .robotscr .inner { padding: 22px 16px; text-align: center; }
-  .robotscr .inner small { color: var(--mint); font-weight: 900; letter-spacing: .14em; font-size: 9px; }
-  .robotscr .inner b { display: block; font-size: 24px; letter-spacing: -.04em; line-height: 1.1; margin: 8px 0 14px; }
-  .robotscr .inner i { display: block; font-style: normal; background: var(--mint); color: var(--dark); border-radius: 12px; padding: 10px; font-weight: 900; }
-  .demo ul { padding-left: 20px; color: #4c6b6e; }
-  .demo li { margin-bottom: 6px; }
-
-  .kpis .card b { display: block; font-size: 30px; letter-spacing: -.05em; line-height: 1.1; margin-bottom: 6px; }
-
-  /* Form */
-  .form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .form label { display: block; font-size: 12px; font-weight: 850; }
-  .form input, .form select, .form textarea { width: 100%; border: 1px solid #c6d8ca; background: #fff; border-radius: 10px; padding: 12px 13px; margin-top: 7px; color: #173c33; }
-  .form textarea { min-height: 95px; resize: vertical; }
-  .form .wide { grid-column: span 2; }
-  .form .output { border: 1px solid #cae3c0; background: #edfae5; padding: 14px; border-radius: 10px; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
-  .note { background: #fff3e4; border: 1px solid #efd2a6; border-radius: 10px; padding: 15px; color: #8d622f; font-size: 13px; }
-
-  .footer { background: #081b20; padding: 47px 0; color: #abc7bb; }
-  .footer .content { display: flex; justify-content: space-between; gap: 22px; align-items: center; flex-wrap: wrap; }
-  .footer .wordmark { color: #fff; }
-  .footer .wordmark span { color: var(--mint); }
-  .foot-note { font-size: 12px; color: #9cb6a9; }
-
-  @media (max-width: 1100px) {
-    .navlinks { display: none; }
-    .cols4 { grid-template-columns: repeat(2, 1fr); }
-    .visual { transform: scale(.88); }
-  }
-  @media (max-width: 860px) {
-    .container { width: calc(100% - 32px); }
-    .hero-grid { grid-template-columns: 1fr; padding: 56px 0 10px; gap: 0; min-height: 0; }
-    .visual { min-height: 380px; transform: scale(.75); transform-origin: center top; }
-    .float.one { right: 10px; } .float.two { left: 8px; }
-    .section { padding: 62px 0; }
-    .section-head { display: block; }
-    .section-head p { margin-top: 14px; }
-    .cols2, .cols3, .steps, .demo { grid-template-columns: 1fr; }
-    .case { grid-template-columns: 1fr; gap: 4px; }
-    .form { grid-template-columns: 1fr; }
-    .form .wide { grid-column: 1; }
-    .hero-buttons .btn { width: 100%; }
-    .card { padding: 22px; }
-    .screens { min-height: 340px; }
-  }
-  @media (max-width: 520px) {
-    .cols4 { grid-template-columns: 1fr; }
-    .nav .btn.primary { display: none; }
-    .scr.robotscr { width: 58%; }
-  }
-</style>
+<link rel="stylesheet" href="site.css">
 </head>
 <body>
-<header class="top"><div class="container nav">
-  <a class="identity" href="#top" aria-label="MEKONIQ — trang chủ"><img src="demo/logo.svg" alt="">
-    <div><div class="wordmark">MEKONI<span>Q</span></div><small>Intelligence in Motion</small></div></a>
-  <nav class="navlinks" aria-label="Chính">
-    <a href="#how">Cách hoạt động</a><a href="#capabilities">Tính năng</a><a href="#fallback">Khi có sự cố</a><a href="#demo">Demo</a><a href="#pilot">Pilot</a>
-  </nav>
-  <div style="display:flex;gap:8px"><a class="btn" href="demo/showcase.html">Xem demo ↗</a><a class="btn primary" href="#pilot">Đăng ký pilot</a></div>
+<header class="top"><div class="wrap">
+  <a class="identity" href="index.html" aria-label="MEKONIQ — trang chủ"><img src="demo/logo.svg" alt=""><div><div class="wordmark">MEKONI<span>Q</span></div><small>Intelligence in Motion</small></div></a>
+  <nav class="nav" aria-label="Chính"><a href="index.html" aria-current="page">Trang chủ</a><a href="serve.html">Serve S1</a><a href="demo.html">Demo</a><a href="contact.html">Liên hệ</a></nav>
+  <a class="btn primary" href="contact.html">Đặt lịch demo</a>
 </div></header>
 
-<main id="top">
-  <section class="hero"><div class="container hero-grid">
+<main>
+  <section class="hero on-dark"><div class="wrap">
     <div>
-      <div class="eyebrow">MEKONIQ Serve · Robot phục vụ nhà hàng</div>
-      <h1>Less walking.<br><em>More serving.</em></h1>
+      <p class="eyebrow">MEKONIQ Serve · Robot phục vụ nhà hàng</p>
+      <h1>Ít đi lại.<br><span>Phục vụ nhiều hơn.</span></h1>
+      <p class="tag">Less walking. More serving.</p>
       <p>Để robot nhận phần đường đi lặp lại giữa bếp, quầy và bàn. Để nhân viên tập trung vào khách hàng.</p>
-      <div class="hero-buttons">
-        <a href="demo/showcase.html" class="btn primary big">▶ Xem demo điều phối trực tiếp</a>
-        <a href="#pilot" class="btn outline-light big">Yêu cầu khảo sát &amp; pilot ↘</a>
-      </div>
-      <div class="hero-meta">
-        <div><b>Bếp · Pha chế · Dọn bàn</b>Nhiều trạm gọi cùng một đội robot</div>
-        <div><b>4 khay / chuyến</b>Giao nhiều bàn một lượt</div>
-        <div><b>Tiếng Việt</b>Giao diện và thông báo giọng nói</div>
+      <div class="row">
+        <a class="btn primary big" href="demo.html">▶ Xem demo điều phối</a>
+        <a class="btn big" href="contact.html">Yêu cầu khảo sát &amp; pilot</a>
       </div>
     </div>
     <div class="visual" aria-hidden="true">
@@ -222,134 +40,84 @@
     </div>
   </div></section>
 
-  <section class="section" id="how"><div class="container">
-    <div class="section-head"><div><div class="eyebrow">Cách hoạt động</div><h2>Giao món theo<br>quy trình của quán.</h2></div>
+  <div class="wrap points">
+    <div><b>Bếp · Pha chế · Dọn bàn</b>Nhiều trạm gọi cùng một đội robot</div>
+    <div><b>4 khay / chuyến</b>Giao nhiều bàn một lượt</div>
+    <div><b>Tiếng Việt</b>Giao diện và thông báo giọng nói</div>
+  </div>
+
+  <section class="section tint"><div class="wrap">
+    <div class="head"><div><p class="eyebrow">Cách hoạt động</p><h2>Giao món theo<br>quy trình của quán.</h2></div>
       <p>Không thay đổi cách bếp làm việc. Robot nhận phần đi lại; nhân viên vẫn kiểm soát từng chuyến.</p></div>
-    <div class="steps">
-      <div class="step"><h3>Nhân viên gọi robot</h3><p>Tablet ở bếp, quầy pha chế hay khu dọn bàn chọn bàn hoặc khu vực. Nhiệm vụ vào hàng chờ, robot rảnh gần nhất nhận việc.</p></div>
-      <div class="step"><h3>Robot thực hiện</h3><p>Robot chạy theo tuyến đã khảo sát, thông báo bằng tiếng Việt khi tới bàn và chờ khách xác nhận đã nhận món.</p></div>
-      <div class="step"><h3>Quản lý thấy hiệu quả</h3><p>Mỗi chuyến được ghi lại: thời gian, hoàn thành hay huỷ, số lần nhân viên phải can thiệp — để đo pilot bằng dữ liệu.</p></div>
+    <div class="cards">
+      <div class="card"><span class="num">01</span><h3>Nhân viên gọi robot</h3><p>Tablet ở bếp, quầy pha chế hay khu dọn bàn chọn bàn hoặc khu vực. Nhiệm vụ vào hàng chờ, robot rảnh gần nhất nhận việc.</p></div>
+      <div class="card"><span class="num">02</span><h3>Robot thực hiện</h3><p>Robot chạy theo tuyến đã khảo sát, thông báo bằng tiếng Việt khi tới bàn và chờ khách xác nhận đã nhận món.</p></div>
+      <div class="card"><span class="num">03</span><h3>Quản lý thấy hiệu quả</h3><p>Mỗi chuyến được ghi lại: thời gian, hoàn thành hay huỷ, số lần nhân viên phải can thiệp — để đo pilot bằng dữ liệu.</p></div>
     </div>
   </div></section>
 
-  <section class="section tint" id="capabilities"><div class="container">
-    <div class="section-head"><div><div class="eyebrow">Một hệ thống · nhiều việc</div><h2>Không chỉ chạy<br>bếp → bàn.</h2></div>
-      <p>Một ca làm thật có nhiều người cùng cần robot. MEKONIQ Serve điều phối chung một đội robot cho cả quán.</p></div>
-    <div class="cols3">
-      <div class="card"><div class="iconbox">🍽</div><h3>Giao nhiều bàn một chuyến</h3><p>Xếp tối đa 4 khay, mỗi khay một bàn. Robot giao lần lượt và báo khay nào cho bàn nào.</p></div>
-      <div class="card"><div class="iconbox">🥤</div><h3>Đồ uống từ quầy pha chế</h3><p>Quầy pha chế gọi robot riêng, không phải chờ bếp. Mỗi trạm chỉ nghe thông báo của khu vực mình.</p></div>
-      <div class="card"><div class="iconbox">🧺</div><h3>Thu dọn bàn</h3><p>Gọi robot tới bàn khách vừa về, đặt chén đĩa lên khay, robot mang thẳng ra khu rửa.</p></div>
-      <div class="card"><div class="iconbox">📣</div><h3>Gọi robot bất kỳ</h3><p>Gọi robot gần nhất — hoặc chỉ định một robot — tới bếp, quầy hay bàn, rồi giao việc tiếp ngay trên màn hình robot.</p></div>
-      <div class="card"><div class="iconbox">📱</div><h3>Khách huỷ bằng QR</h3><p>Khách theo dõi món đang tới và có thể huỷ từ QR tại bàn hoặc ngay trên màn hình robot.</p></div>
-      <div class="card"><div class="iconbox">⚡</div><h3>Ưu tiên &amp; hàng chờ</h3><p>Đánh dấu gấp để lên đầu hàng chờ. Robot pin yếu tự ngừng nhận việc và về sạc.</p></div>
+  <section class="section"><div class="wrap split">
+    <div>
+      <p class="eyebrow">Màn hình robot mới</p>
+      <h2>Khách biết ngay<br>món ở khay nào.</h2>
+      <p class="lead">Tablet trên robot nói song ngữ Việt · Anh, chữ lớn đọc được từ xa, nút xác nhận luôn ở cùng một chỗ.</p>
+      <ul>
+        <li>Khay đang giao sáng lên; các khay khác ghi rõ bàn nào.</li>
+        <li>Khách bấm “Đã nhận món” hoặc trả lại bếp nếu không phải món của mình.</li>
+        <li>Nút DỪNG · STOP luôn nằm trên thanh đầu màn hình.</li>
+      </ul>
+      <div class="row" style="margin-top:20px">
+        <a class="btn dark" href="demo/robot.html?robot=R1">Mở màn hình robot ↗</a>
+        <a class="btn" href="demo/showcase.html">▶ Chế độ trình diễn</a>
+      </div>
+    </div>
+    <div class="tablet" role="img" aria-label="Màn hình robot khi tới bàn: Mời quý khách lấy món ở Khay 1">
+      <div class="mock">
+        <div class="bar"><img src="demo/logo.svg" alt=""><div><b>Bàn 05 · Giao món đến</b><small>YOUR ORDER IS HERE</small></div><span class="sp"></span><span class="stop">DỪNG · STOP</span></div>
+        <div class="body">
+          <div class="main">
+            <div class="trays"><i class="on"><small>K1</small>Bàn 05</i><i><small>K2</small>Bàn 07</i><i><small>K3</small>trống</i><i><small>K4</small>trống</i></div>
+            <div class="say"><small>— BÀN 05 · ĐÃ TỚI</small><b>Mời quý khách lấy món ở Khay 1</b><em>Please take your order from Tray 1</em><span>Robot tự quay về sau 60 giây · Returns in 60 s</span></div>
+          </div>
+          <div class="rail"><div class="act primary">Đã nhận món<small>Got it, thanks</small></div><div class="act warn">Trả lại bếp<small>Not mine, send back</small></div></div>
+        </div>
+      </div>
     </div>
   </div></section>
 
-  <section class="section dark" id="fallback"><div class="container">
-    <div class="section-head"><div><div class="eyebrow">Khi mọi thứ không như kế hoạch</div><h2>Fallback rõ ràng<br>là một phần sản phẩm.</h2></div>
+  <section class="section dark"><div class="wrap">
+    <div class="head"><div><p class="eyebrow">Khi có sự cố</p><h2>Fallback rõ ràng<br>là một phần sản phẩm.</h2></div>
       <p>Giờ cao điểm luôn có tình huống. Mỗi tình huống có một cách xử lý định sẵn, và nhân viên luôn biết robot đang làm gì.</p></div>
     <div class="cases">
-      <div class="case"><b>Khách huỷ món khi món đã lên khay</b><span>Robot giao nốt các bàn khác rồi <strong>mang đúng khay đó về nơi đã lấy</strong> — không bỏ đồ ăn giữa đường.</span></div>
-      <div class="case"><b>Huỷ trước khi bếp xếp đồ</b><span>Màn hình robot ghi rõ khay nào <strong>không cần xếp</strong>; huỷ hết thì robot về luôn.</span></div>
+      <div class="case"><b>Khách huỷ món</b><span>Món đã lên khay: robot giao nốt các bàn khác rồi <strong>mang đúng khay đó về nơi đã lấy</strong>. Chưa xếp: màn hình robot ghi rõ khay nào <strong>không cần xếp</strong>.</span></div>
       <div class="case"><b>Khách không ra nhận</b><span>Robot <strong>nhắc bằng giọng nói</strong>, quá thời gian thì tự mang món về và báo cho bếp.</span></div>
       <div class="case"><b>Robot bị chặn đường</b><span>Robot dừng, xin nhường đường, chờ rồi <strong>tự đi đường vòng</strong>. Hết đường vòng thì <strong>mọi trạm nhận cảnh báo</strong> cho tới khi lối đi được dọn.</span></div>
       <div class="case"><b>Dừng khẩn cấp</b><span>Robot dừng hẳn; chỉ <strong>nhả dừng được tại chính robot</strong> sau khi nhân viên kiểm tra.</span></div>
       <div class="case"><b>Mất kết nối, pin yếu, kẹt việc</b><span>Cảnh báo tức thì; robot khác nhận việc thay; nhân viên có thể <strong>chuyển sang xử lý thủ công</strong> bất cứ lúc nào.</span></div>
     </div>
-    <div class="callout warn" style="margin-top:22px;color:#5b3a15"><h3>Safety is the product.</h3><p style="color:#7a5326">Phần mềm điều phối không phải hệ thống an toàn. Nút dừng khẩn cấp và an toàn chuyển động phải nằm trên phần cứng robot và được kiểm chứng tại hiện trường trước mọi pilot. Giai đoạn đầu không giao chất lỏng nóng.</p></div>
+    <div class="safety"><h3>Safety is the product.</h3><p>Phần mềm điều phối không phải hệ thống an toàn. Nút dừng khẩn cấp và an toàn chuyển động phải nằm trên phần cứng robot và được kiểm chứng tại hiện trường trước mọi pilot. Giai đoạn đầu không giao chất lỏng nóng.</p></div>
   </div></section>
 
-  <section class="section" id="demo"><div class="container demo">
-    <div>
-      <div class="eyebrow">Demo tương tác</div>
-      <h2>Thử điều phối<br>ngay trên trình duyệt.</h2>
-      <p class="lead">Ba robot giả lập, mười hai bàn. Mở màn hình bếp, màn hình robot và trang QR của khách — tất cả đồng bộ với nhau.</p>
-      <ul>
-        <li>Giao Bàn 05 và 07 trong một chuyến, rồi thử huỷ món từ phía khách.</li>
-        <li>Gọi robot về bếp hoặc tới bàn để thu dọn.</li>
-        <li>Đặt vật cản lên lối đi, xem robot chờ và đi vòng; mô phỏng mất kết nối, dừng khẩn cấp.</li>
-        <li>Thiết kế lộ trình: lối hẹp, một chiều, vùng đi chậm, đóng lối tạm thời.</li>
-      </ul>
-      <div class="hero-buttons" style="margin-top:20px">
-        <a class="btn darkbtn big" href="demo/showcase.html">▶ Chế độ trình diễn</a>
-        <a class="btn big" href="demo/">Mở từng màn hình</a>
-      </div>
-      <p class="small muted" style="margin-top:14px">Demo chạy hoàn toàn trong trình duyệt của bạn, không gửi dữ liệu đi. Robot là mô phỏng.</p>
-    </div>
-    <a class="screens" href="demo/showcase.html" aria-label="Mở demo">
-      <div class="scr station">
-        <div class="bar"><img src="demo/logo.svg" alt="">Trạm bếp · Sơ đồ nhà hàng</div>
-        <div class="map">
-          <div class="zones"><div>Pha chế</div><div>Khu rửa</div><div>Bếp</div></div>
-          <div class="tbls"><span>01</span><span>02</span><span class="on">03</span><span>04</span><span class="r">R1</span><span>06</span><span class="on">07</span><span>08</span><span>09</span><span>10</span><span>11</span><span>12</span></div>
-        </div>
-        <div class="mrow"><b>#2 Giao Bếp → Bàn 05, 07</b><em>R1 · Giao cho khách</em></div>
-      </div>
-      <div class="scr robotscr">
-        <div class="bar"><img src="demo/logo.svg" alt="">Robot R1</div>
-        <div class="inner"><small>BÀN 05</small><b>Món của quý khách ở Khay 1</b><i>✓ Đã nhận món</i></div>
-      </div>
-    </a>
-  </div></section>
-
-  <section class="section tint"><div class="container">
-    <div class="section-head"><div><div class="eyebrow">Đo bằng dữ liệu</div><h2>Pilot được đánh giá<br>bằng số liệu thật.</h2></div>
+  <section class="section"><div class="wrap">
+    <div class="head"><div><p class="eyebrow">Pilot · Đo bằng dữ liệu</p><h2>Pilot được đánh giá<br>bằng số liệu thật.</h2></div>
       <p>Mỗi pilot thống nhất KPI và cách đo từ đầu. Các chỉ số dưới đây là những gì hệ thống ghi nhận — không phải kết quả đã đạt.</p></div>
-    <div class="cols4 kpis">
-      <div class="card"><b>Mission completion</b><p>Tỷ lệ chuyến giao hoàn tất trên tổng số chuyến hợp lệ.</p></div>
-      <div class="card"><b>Can thiệp</b><p>Số lần nhân viên phải xử lý: dừng khẩn, vật cản, chuyển thủ công.</p></div>
-      <div class="card"><b>Thời gian giao</b><p>Từ lúc bếp gọi robot tới lúc khách bấm đã nhận.</p></div>
-      <div class="card"><b>Uptime</b><p>Thời gian robot sẵn sàng so với giờ hoạt động dự kiến.</p></div>
+    <div class="cards four">
+      <div class="card"><b class="big">Mission completion</b><p>Tỷ lệ chuyến giao hoàn tất trên tổng số chuyến hợp lệ.</p></div>
+      <div class="card"><b class="big">Can thiệp</b><p>Số lần nhân viên phải xử lý: dừng khẩn, vật cản, chuyển thủ công.</p></div>
+      <div class="card"><b class="big">Thời gian giao</b><p>Từ lúc bếp gọi robot tới lúc khách bấm đã nhận.</p></div>
+      <div class="card"><b class="big">Uptime</b><p>Thời gian robot sẵn sàng so với giờ hoạt động dự kiến.</p></div>
     </div>
-    <div class="cols2" style="margin-top:22px">
-      <div class="card"><h3>Phù hợp với quán nào?</h3><p>Nhà hàng lẩu, nướng, buffet, tiệc hoặc chuỗi có nhiều lượt bếp → bàn mỗi ngày, mặt sàn phẳng, lối đi tương đối ổn định, sẵn sàng tham gia đánh giá thực địa.</p></div>
-      <div class="card"><h3>Chúng tôi cung cấp gì?</h3><p>Khảo sát mặt bằng, thiết kế tuyến giao, robot + phần mềm điều phối tiếng Việt, đào tạo nhân viên, hỗ trợ kỹ thuật gần hiện trường và báo cáo kết quả theo KPI đã thống nhất.</p></div>
-    </div>
-  </div></section>
-
-  <section class="section" id="pilot"><div class="container cols2">
-    <div>
-      <div class="eyebrow">Pilot interest</div>
-      <h2>Cùng đánh giá<br>nhà hàng của bạn.</h2>
-      <p class="lead">Mô tả không gian và hoạt động hiện tại. MEKONIQ dùng thông tin này để chuẩn bị buổi khảo sát khi dự án sẵn sàng nhận pilot.</p>
-      <div class="note">Form này <strong>không gửi dữ liệu tới server</strong> và không lưu thông tin. Nút bên cạnh chỉ tạo bản nháp để bạn copy và gửi cho đội MEKONIQ qua kênh bạn đang liên hệ.</div>
-    </div>
-    <div class="card">
-      <form class="form" id="lead">
-        <label>Tên người liên hệ<input name="name" required maxlength="80" placeholder="Nguyễn Văn A" autocomplete="name"></label>
-        <label>Nhà hàng / chuỗi<input name="restaurant" required maxlength="120" placeholder="Tên nhà hàng" autocomplete="organization"></label>
-        <label>Khu vực<select name="city"><option>TP.HCM</option><option>Hà Nội</option><option>Khác</option></select></label>
-        <label>Số bàn (ước tính)<input name="tables" type="number" min="1" max="2000" placeholder="40"></label>
-        <label class="wide">Khó khăn vận hành<textarea name="problem" maxlength="1000" placeholder="Số lượt chuyển món, chiều dài tuyến bếp → bàn, giờ cao điểm…"></textarea></label>
-        <button class="btn darkbtn big wide" type="submit">Tạo bản nháp yêu cầu pilot</button>
-        <div class="output wide" id="leadOut" hidden></div>
-        <button type="button" class="btn big wide" id="leadCopy" hidden>Copy nội dung</button>
-      </form>
+    <div class="cta">
+      <div><h2>Cùng đánh giá nhà hàng của bạn.</h2><p>Khảo sát mặt bằng, thiết kế tuyến giao, rồi đo pilot bằng KPI đã thống nhất.</p></div>
+      <a class="btn dark big" href="contact.html">Đăng ký pilot →</a>
     </div>
   </div></section>
 </main>
 
-<footer class="footer"><div class="container content">
-  <div><div class="wordmark">MEKONI<span>Q</span></div><div class="foot-note">Intelligence in Motion. · Useful robotics, everywhere.</div></div>
-  <div class="foot-note">Concept sản phẩm MEKONIQ Serve S1 · 2026<br>Chưa phải chào bán thương mại hay tuyên bố chứng nhận an toàn.</div>
+<footer class="footer"><div class="wrap">
+  <div><div class="wordmark">MEKONI<span>Q</span></div>Intelligence in Motion. · Useful robotics, everywhere.</div>
+  <nav aria-label="Cuối trang"><a href="index.html">Trang chủ</a><a href="serve.html">Serve S1</a><a href="demo.html">Demo</a><a href="contact.html">Liên hệ</a></nav>
+  <div>Concept sản phẩm MEKONIQ Serve S1 · 2026<br>Chưa phải chào bán thương mại hay tuyên bố chứng nhận an toàn.</div>
 </div></footer>
-
-<script>
-(() => {
-  const form = document.getElementById('lead'), out = document.getElementById('leadOut'), copy = document.getElementById('leadCopy');
-  let draft = '';
-  form.addEventListener('submit', e => {
-    e.preventDefault();
-    const v = n => form.elements[n].value.trim();
-    draft = `MEKONIQ SERVE — YÊU CẦU KHẢO SÁT & PILOT\nNgười liên hệ: ${v('name')}\nNhà hàng: ${v('restaurant')}\nKhu vực: ${v('city')}\nSố bàn: ${v('tables') || 'Chưa rõ'}\nKhó khăn vận hành: ${v('problem') || 'Chưa mô tả'}\n\n(Bản nháp tạo trên trang, chưa được gửi đi.)`;
-    out.textContent = draft; out.hidden = false; copy.hidden = false; copy.textContent = 'Copy nội dung';
-  });
-  copy.addEventListener('click', () => {
-    const fail = () => { copy.textContent = 'Hãy bôi đen và copy bản nháp phía trên'; };
-    if (navigator.clipboard) navigator.clipboard.writeText(draft).then(() => { copy.textContent = '✓ Đã copy'; }, fail);
-    else fail();
-  });
-})();
-</script>
 </body>
 </html>

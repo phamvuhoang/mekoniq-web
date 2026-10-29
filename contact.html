@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Liên hệ · Đăng ký pilot · MEKONIQ Serve</title>
+<meta name="description" content="Đăng ký khảo sát và pilot MEKONIQ Serve S1 cho nhà hàng của bạn.">
+<meta name="theme-color" content="#071d21">
+<link rel="icon" href="demo/logo.svg">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="identity" href="index.html" aria-label="MEKONIQ — trang chủ"><img src="demo/logo.svg" alt=""><div><div class="wordmark">MEKONI<span>Q</span></div><small>Intelligence in Motion</small></div></a>
+  <nav class="nav" aria-label="Chính"><a href="index.html">Trang chủ</a><a href="serve.html">Serve S1</a><a href="demo.html">Demo</a><a href="contact.html" aria-current="page">Liên hệ</a></nav>
+  <a class="btn primary" href="contact.html">Đặt lịch demo</a>
+</div></header>
+
+<main>
+  <section class="section"><div class="wrap cards two">
+    <div>
+      <p class="eyebrow">Pilot interest</p>
+      <h2>Cùng đánh giá<br>nhà hàng của bạn.</h2>
+      <p class="lead">Mô tả không gian và hoạt động hiện tại. MEKONIQ dùng thông tin này để chuẩn bị buổi khảo sát khi dự án sẵn sàng nhận pilot.</p>
+      <div class="steps">
+        <div class="card"><span class="num">1</span><h3>Gửi thông tin nhà hàng</h3><p>Số bàn, khu vực, khó khăn vận hành hiện tại.</p></div>
+        <div class="card"><span class="num">2</span><h3>Khảo sát mặt bằng</h3><p>Thiết kế tuyến giao, thống nhất KPI và cách đo từ đầu.</p></div>
+        <div class="card"><span class="num">3</span><h3>Pilot đo bằng dữ liệu</h3><p>Robot + phần mềm điều phối tiếng Việt, đào tạo nhân viên, báo cáo kết quả theo KPI đã thống nhất.</p></div>
+      </div>
+      <div class="note">Form này <strong>không gửi dữ liệu tới server</strong> và không lưu thông tin. Nút “Tạo bản nháp” chỉ tạo nội dung để bạn copy và gửi cho đội MEKONIQ qua kênh bạn đang liên hệ.</div>
+    </div>
+    <div class="card">
+      <form class="form" id="lead">
+        <label>Tên người liên hệ<input name="name" required maxlength="80" placeholder="Nguyễn Văn A" autocomplete="name"></label>
+        <label>Nhà hàng / chuỗi<input name="restaurant" required maxlength="120" placeholder="Tên nhà hàng" autocomplete="organization"></label>
+        <label>Khu vực<select name="city"><option>TP.HCM</option><option>Hà Nội</option><option>Khác</option></select></label>
+        <label>Số bàn (ước tính)<input name="tables" type="number" min="1" max="2000" placeholder="40"></label>
+        <label class="wide">Khó khăn vận hành<textarea name="problem" maxlength="1000" placeholder="Số lượt chuyển món, chiều dài tuyến bếp → bàn, giờ cao điểm…"></textarea></label>
+        <button class="btn dark big wide" type="submit">Tạo bản nháp yêu cầu pilot</button>
+        <div class="done-msg wide" role="status"><span class="ok">✓</span><h3>Đã tạo bản nháp yêu cầu</h3><p class="small" style="margin:0;color:var(--muted)">Chưa được gửi đi — copy nội dung dưới đây và gửi cho đội MEKONIQ qua kênh bạn đang liên hệ.</p></div>
+        <div class="output wide" id="leadOut" hidden></div>
+        <button type="button" class="btn primary big wide" id="leadCopy" hidden>Copy nội dung</button>
+        <button type="button" class="btn wide done-msg" id="leadEdit">← Sửa thông tin</button>
+      </form>
+    </div>
+  </div></section>
+</main>
+
+<footer class="footer"><div class="wrap">
+  <div><div class="wordmark">MEKONI<span>Q</span></div>Intelligence in Motion. · Useful robotics, everywhere.</div>
+  <nav aria-label="Cuối trang"><a href="index.html">Trang chủ</a><a href="serve.html">Serve S1</a><a href="demo.html">Demo</a><a href="contact.html">Liên hệ</a></nav>
+  <div>Concept sản phẩm MEKONIQ Serve S1 · 2026<br>Chưa phải chào bán thương mại hay tuyên bố chứng nhận an toàn.</div>
+</div></footer>
+
+<script>
+(() => {
+  const form = document.getElementById('lead'), out = document.getElementById('leadOut'), copy = document.getElementById('leadCopy');
+  let draft = '';
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const v = n => form.elements[n].value.trim();
+    draft = `MEKONIQ SERVE — YÊU CẦU KHẢO SÁT & PILOT\nNgười liên hệ: ${v('name')}\nNhà hàng: ${v('restaurant')}\nKhu vực: ${v('city')}\nSố bàn: ${v('tables') || 'Chưa rõ'}\nKhó khăn vận hành: ${v('problem') || 'Chưa mô tả'}\n\n(Bản nháp tạo trên trang, chưa được gửi đi.)`;
+    out.textContent = draft; out.hidden = false; copy.hidden = false; copy.textContent = 'Copy nội dung';
+  });
+  copy.addEventListener('click', () => {
+    const fail = () => { copy.textContent = 'Hãy bôi đen và copy bản nháp phía trên'; };
+    if (navigator.clipboard) navigator.clipboard.writeText(draft).then(() => { copy.textContent = '✓ Đã copy'; }, fail);
+    else fail();
+  });
+})();
+// Success state (spec 4.8): hide the fields after the draft is made; "Sửa thông tin" brings them back.
+const leadForm = document.getElementById('lead');
+leadForm.addEventListener('submit', () => leadForm.classList.add('done'));
+document.getElementById('leadEdit').onclick = () => { leadForm.classList.remove('done'); document.getElementById('leadOut').hidden = document.getElementById('leadCopy').hidden = true; };
+</script>
+</body>
+</html>
