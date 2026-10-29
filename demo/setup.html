@@ -189,7 +189,7 @@
         </div>
       </div>
       <div class="card col"><p class="eyebrow sm" id="ptCount">Điểm dừng</p><div class="list" id="points"></div>
-        <div class="foot"><button class="btn primary" id="addTable">+ Thêm bàn</button><button class="btn" id="addStation">+ Thêm trạm</button></div></div>
+        <div class="foot"><button class="btn primary" id="addTable">+ Thêm bàn</button><button class="btn" id="addStation">+ Thêm trạm</button><button class="btn" id="addEntrance">+ Thêm cửa</button></div></div>
     </section>
     <section id="tab-robots" class="tab" hidden>
       <div id="robots"></div>
@@ -297,7 +297,7 @@ document.addEventListener('click', e => {
 
 // ---- Points ----
 function renderPoints() {
-  const order = ['station', 'dish', 'dock', 'table'];
+  const order = ['station', 'entrance', 'dish', 'dock', 'table'];
   const R = valRobots(), r = curRobot();
   $('robotPick').innerHTML = R.length > 1 ? R.map(x => `<button data-robot="${esc(x.id)}" aria-pressed="${r && r.id === x.id}">${esc(x.id)}</button>`).join('') : '';
   $('mapTitle').textContent = r ? `Bản đồ robot ${r.id} · chạm để đặt điểm đang chọn` : 'Bản đồ robot · chỉ có với robot thật (Valetudo)';
@@ -327,12 +327,14 @@ $('delPoint').onclick = () => {
 };
 $('robotPick').onclick = e => { const b = e.target.closest('[data-robot]'); if (b) { robotId = b.dataset.robot; renderPoints(); } };
 $('addTable').onclick = () => { const t = SiteLib.nextTable(D); D.points[t.id] = { name: t.name, kind: 'table' }; sel = t.id; setDirty(true); render(); };
-$('addStation').onclick = () => {
-  const id = prompt('Mã trạm (chữ/số, ví dụ bar2):'); if (!id) return;
+const addPoint = (kind, what, eg) => () => {
+  const id = prompt(`Mã ${what} (chữ/số, ví dụ ${eg}):`); if (!id) return;
   if (!SiteLib.ID.test(id) || D.points[id]) return toast('Mã không hợp lệ hoặc đã có', 'warn');
-  const name = prompt('Tên trạm:', id) || id;
-  D.points[id] = { name, kind: 'station' }; sel = id; setDirty(true); render();
+  const name = prompt(`Tên ${what}:`, id) || id;
+  D.points[id] = { name, kind }; sel = id; setDirty(true); render();
 };
+$('addStation').onclick = addPoint('station', 'trạm', 'bar2');
+$('addEntrance').onclick = addPoint('entrance', 'cửa đón khách', 'door');
 
 // ---- Map (Task 11: canvas, teach by robot position, probe) ----
 let vm = null, mapT = 0, zoom = 1, lastMap = null, tapAt = null;
@@ -499,7 +501,7 @@ function renderGuest() {
   const inp = (path, v, cls = '', type = 'text') => `<input type="${type}" class="${cls}" data-m="${path}" value="${esc(v ?? '')}">`;
   setHTML($('menu'), `<table class="mtab"><tr class="muted small"><td>Mã</td><td>Danh mục</td><td>English</td><td>Trạm làm</td><td></td></tr>
     ${M.cats.map((c, i) => `<tr><td>${inp(`cats.${i}.id`, c.id, 'id')}</td><td>${inp(`cats.${i}.vi`, c.vi)}</td><td>${inp(`cats.${i}.en`, c.en)}</td>
-      <td><select data-m="cats.${i}.station">${stations.map(st => `<option value="${st}" ${(c.station || 'kitchen') === st ? 'selected' : ''}>${esc(D.points[st].name)}</option>`).join('')}</select></td>
+      <td><select data-m="cats.${i}.station">${stations.map(st => `<option value="${st}" ${(c.station || SiteLib.firstStation(D)) === st ? 'selected' : ''}>${esc(D.points[st].name)}</option>`).join('')}</select></td>
       <td><button class="btn sm" data-mdel="cats.${i}" aria-label="Xoá danh mục">✕</button></td></tr>`).join('')}</table>
     <button class="btn sm" data-madd="cats">+ Thêm danh mục</button>
     <table class="mtab"><tr class="muted small"><td>Mã</td><td>Món</td><td>English</td><td>Giá (đ)</td><td>Danh mục</td><td></td></tr>
@@ -523,7 +525,7 @@ $('tab-guest').addEventListener('click', e => {
   else if (del) { const [list, i] = del.dataset.mdel.split('.'); D.menu[list].splice(+i, 1); }
   else if (add) {
     const list = add.dataset.madd, n = D.menu[list].length + 1;
-    D.menu[list].push(list === 'cats' ? { id: 'dm' + n, vi: '', en: '', station: 'kitchen' } : { id: 'mon' + n, cat: D.menu.cats[0].id, vi: '', en: '', price: 0 });
+    D.menu[list].push(list === 'cats' ? { id: 'dm' + n, vi: '', en: '', station: SiteLib.firstStation(D) } : { id: 'mon' + n, cat: D.menu.cats[0].id, vi: '', en: '', price: 0 });
   } else return;
   setDirty(true); renderGuest();
 });

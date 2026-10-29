@@ -102,6 +102,7 @@ function normalize(input, seed) {
 }
 
 // Robot menu (features.order): cats [{id, vi, en, station}], items [{id, cat, vi, en, price}] in VND.
+const firstStation = site => Object.keys(site.points || {}).find(k => site.points[k].kind === 'station');
 function menu(site, errors) {
   const m = site.menu && typeof site.menu === 'object' ? site.menu : {};
   const cats = Array.isArray(m.cats) ? m.cats.filter(x => x && typeof x === 'object') : [];
@@ -116,8 +117,8 @@ function menu(site, errors) {
   };
   for (const c of cats) {
     named(c, 'Danh mục');
-    c.station = c.station || 'kitchen';
-    if (c.station !== 'kitchen' && (!site.points[c.station] || site.points[c.station].kind !== 'station')) errors.push(`Danh mục "${c.id}": trạm "${c.station}" không phải điểm loại station`);
+    c.station = String(c.station || firstStation(site) || '');
+    if (!site.points[c.station] || site.points[c.station].kind !== 'station') errors.push(`Danh mục "${c.id}": trạm "${c.station}" không phải điểm loại station`);
   }
   seen.clear();
   for (const it of items) {
@@ -151,4 +152,4 @@ function nextTable(site) {
   }
 }
 
-module.exports = { normalize, inUse, nextTable, KNOBS, RETRY_ERR, MAX_BYTES, ID, KINDS, NOTES };
+module.exports = { normalize, inUse, nextTable, KNOBS, RETRY_ERR, MAX_BYTES, ID, KINDS, NOTES, firstStation };

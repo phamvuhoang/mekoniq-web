@@ -64,11 +64,12 @@ function log(c, level, text, robot) {
 function alert(c, key, level, text, robot) {
   if (c.st.alerts.some(a => a.key === key)) return;
   c.st.alerts.unshift({ id: ++c.st.alertSeq, key, t: c.now, level, text, robot });
-  // Full list: drop the oldest warning first, so guest calls / orders never push out an e-stop, offline or blocked alert.
+  // Full list: drop the oldest warning (possibly the one just added), so guest calls / orders never push out an
+  // e-stop, offline or blocked alert. Only when all 20 are errors does the oldest error go.
   while (c.st.alerts.length > 20) {
     let i = c.st.alerts.length - 1;
-    while (i > 0 && c.st.alerts[i].level === 'error') i--;
-    c.st.alerts.splice(i > 0 ? i : c.st.alerts.length - 1, 1);
+    while (i >= 0 && c.st.alerts[i].level === 'error') i--;
+    c.st.alerts.splice(i >= 0 ? i : c.st.alerts.length - 1, 1);
   }
 }
 // Phase-2 features are opt-in per site (site.features); the UI hides them too, this is the server-side gate.
@@ -175,9 +176,9 @@ function guide(c, d, by) {
   const P = c.site.points, r = c.st.robots[d.robot], cur = r && findM(c, r.mission);
   if (!r || !P[d.to] || P[d.to].kind !== 'table' || r.halt || r.offline) return;
   const s = cur && r.phase === 'atStop' && cur.stops[cur.cur];
-  const here = s ? s.a === 'standby' && ['station', 'entrance'].includes(P[s.p].kind) : !cur && r.phase === 'idle' && P[r.at] && P[r.at].kind === 'entrance';
-  if (!here || !feature(c, 'guide', by)) return;
-  if (cur) { s.status = 'done'; s.by = by; finish(c, cur); }
+  // Robots only go idle at the dock, so "waiting at the entrance" always means a standby stop there.
+  if (!s || s.a !== 'standby' || !['station', 'entrance'].includes(P[s.p].kind) || !feature(c, 'guide', by)) return;
+  s.status = 'done'; s.by = by; finish(c, cur);
   const m = { id: ++c.st.seq, kind: 'guide', by, urgent: false, robotPref: r.id, createdAt: c.now, startedAt: c.now, status: 'active',
     robot: r.id, loaded: false, cur: -1, note: '', stops: [{ p: d.to, a: 'guide', status: 'pending' }] };
   m.label = label(c, m);
@@ -253,7 +254,7 @@ function retarget(c, m, d, by, session) {
   if (s.status === 'active') goTo(c, r, d.to, 'toStop');
   const text = `${by} đổi ${pname(c, old)} → ${pname(c, d.to)} của ${m.label}`;
   log(c, 'info', text, m.robot);
-  ev(c, { table: old, text: `${pname(c, old)}: món chuyển sang ${pname(c, d.to)}` });
+  ev(c, { table: old, moved: d.to, text: `${pname(c, old)}: món chuyển sang ${pname(c, d.to)}` });
   ev(c, { table: d.to, text });
 }
 
@@ -301,6 +302,7 @@ function call(c, d, by) {
   log(c, 'info', `${by}: ${text}`);
 }
 
+const SLOW = 0.5;   // guide "Đi chậm hơn" speed factor
 const vnd = n => String(n).replace(/\B(?=(\d{3})+$)/g, '.') + 'đ';
 // Guest orders on the robot screen. One alert per preparing station listing only its items; the station then
 // sends the delivery as usual (food must be cooked first, so no mission is created here).
@@ -314,7 +316,7 @@ function order(c, d, by) {
   c.st.orders.push(o);
   const byStation = {};
   for (const { x, it } of lines) {
-    const station = (cats.find(k => k.id === it.cat) || {}).station || 'kitchen';
+    const station = (cats.find(k => k.id === it.cat) || {}).station || Site.firstStation(c.site);
     (byStation[station] = byStation[station] || []).push({ it, qty: x.qty });
   }
   for (const [station, list] of Object.entries(byStation)) {
@@ -463,7 +465,7 @@ function fromUI(c, d, session, seed) {
     case 'speed':   // guide: "Đi chậm hơn" for guests who walk slowly; ends with the mission
       if (!r || !r.mission || r.offline || !!d.slow === !!r.slow) return;
       r.slow = !!d.slow;
-      c.cmds.push({ cmd: 'speed', robot: r.id, factor: r.slow ? 0.5 : 1 });
+      c.cmds.push({ cmd: 'speed', robot: r.id, factor: r.slow ? SLOW : 1 });
       log(c, 'info', `${by}: ${r.id} ${r.slow ? 'đi chậm' : 'đi bình thường'}`, r.id);
       return;
     case 'retarget': if (m) retarget(c, m, d, by, session); return;
@@ -549,7 +551,7 @@ function fromUI(c, d, session, seed) {
 function snapshot(st) {
   return {
     robots: Object.values(st.robots).map(({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince, nav, why, path, rem, pos, slow }) =>
-      ({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince, nav, why, path, rem, pos: pos || null, slow: !!slow })),
+      ({ id, x, y, battery, phase, at, target, mission, halt, offline, charging, waitSince, nav, why, path, rem, pos: pos || null, slow: slow ? SLOW : 0 })),   // slow = speed factor while guiding slowly, 0 = normal
     missions: st.missions, history: st.history.slice(0, 15), log: st.log.slice(0, 40), alerts: st.alerts, kpi: st.kpi,
     obstacles: st.obstacles, mapV: st.map.v, orders: st.orders
   };

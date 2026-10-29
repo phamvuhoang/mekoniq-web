@@ -251,11 +251,11 @@ function routeList(m) {
 const lowBat = r => r.battery < App.site.timing.lowBattery;
 const batChip = r => lowBat(r) ? `<div class="chips"><span class="pill danger">Pin ${Math.round(r.battery)}% · về sạc sau việc này</span></div>` : '';
 
-// Guests can be led to a table from where they wait: standby at a station / the entrance, or idle at the entrance (spec 6.2).
+// Guests can be led to a table from where they wait: a standby stop at a station / the entrance (spec 6.2).
 function canGuide(r, m) {
   if (!feat('guide') || r.halt || r.offline) return false;
-  const P = App.site.points, s = m && r.phase === 'atStop' && m.stops[m.cur];
-  return s ? s.a === 'standby' && ['station', 'entrance'].includes((P[s.p] || {}).kind) : !m && r.phase === 'idle' && (P[r.at] || {}).kind === 'entrance';
+  const s = m && r.phase === 'atStop' && m.stops[m.cur];
+  return !!s && s.a === 'standby' && ['station', 'entrance'].includes((App.site.points[s.p] || {}).kind);
 }
 const guideBtn = (r, m) => canGuide(r, m) ? act('primary', 'Dẫn tôi tới bàn', 'Guide me to a table', 'guide') : '';
 const tablesOf = () => Object.keys(App.site.points).filter(k => App.site.points[k].kind === 'table');
@@ -460,9 +460,12 @@ function render() {
   lastDest = dest;
   if (!(r && r.phase === 'atStop' && m && m.stops[m.cur].a === 'standby')) { pick = []; mode = 'deliver'; }
   if (!r || !canGuide(r, m)) { guiding = false; gpick = null; }
-  if (!r || !canOrder(r)) { ordering = false; cart = {}; otable = null; }
+  if (!r || !canOrder(r)) {
+    if (ordering && Object.values(cart).some(q => q > 0)) toast('Robot phải đi — đơn chưa gửi, gọi nhân viên · Robot had to leave, order not sent', 'warn');
+    ordering = false; cart = {}; otable = null;
+  }
   if (!r || !canPay(r)) paying = false;
-  if (r && m && m.kind === 'guide' && r.phase === 'toStop') g0[m.id] = Math.max(g0[m.id] || 0, r.rem || 0);
+  if (r && m && m.kind === 'guide' && r.phase === 'toStop') g0 = { [m.id]: Math.max(g0[m.id] || 0, r.rem || 0) };   // only the current guide's entry, so a kiosk left on for weeks doesn't grow it
   const v = view(r, m);
   document.body.className = 't-' + v.tone;
   $('bar').textContent = v.bar;

@@ -58,7 +58,7 @@ const DICT = {
     coming: p => `Robot ${p.robot} đang tới · ${p.eta ? `khoảng ${p.eta} giây` : 'sắp tới'}`, other: p => `Robot ${p.robot} đang giao bàn khác trước, sau đó tới bàn bạn`,
     paused: ' (robot đang tạm dừng)', cancel: 'Huỷ món này', sure: 'Chạm lần nữa để huỷ món',
     order: 'Đơn', orderNew: 'Bếp đã nhận · đang chuẩn bị', orderPaid: 'Đã báo chuyển khoản · chờ nhân viên xác nhận', total: 'Tổng',
-    staff: 'Gọi nhân viên', bill: 'Xin hoá đơn', staffOk: 'Đã gọi nhân viên — vui lòng chờ', billOk: 'Đã xin hoá đơn — nhân viên sẽ mang tới' },
+    staff: 'Gọi nhân viên', bill: 'Xin hoá đơn', staffOk: 'Đã gọi nhân viên — vui lòng chờ', billOk: 'Đã xin hoá đơn — nhân viên sẽ mang tới', moved: t => `Món này của ${t} — bếp đã sửa nhầm bàn` },
   en: { brand: 'Serve S1 · Guest', eyebrow: 'Track your order', table: t => 'Table ' + t, food: 'Food', drink: 'Drinks', tray: 'tray',
     help: 'You can cancel an item on its way. If it is already on a tray, the robot takes it back to the kitchen/bar. For anything else, please call staff.',
     empty: 'Nothing on its way to your table yet.', offline: 'Connection lost — reconnecting…',
@@ -67,7 +67,7 @@ const DICT = {
     coming: p => `Robot ${p.robot} on the way · ${p.eta ? `about ${p.eta} s` : 'arriving'}`, other: p => `Robot ${p.robot} serves another table first, then yours`,
     paused: ' (robot paused)', cancel: 'Cancel this item', sure: 'Tap again to cancel',
     order: 'Order', orderNew: 'Kitchen received · preparing', orderPaid: 'Payment reported · waiting for staff', total: 'Total',
-    staff: 'Call staff', bill: 'Request bill', staffOk: 'Staff called — please wait', billOk: 'Bill requested — staff will bring it' },
+    staff: 'Call staff', bill: 'Request bill', staffOk: 'Staff called — please wait', billOk: 'Bill requested — staff will bring it', moved: t => `This item was for ${t} — the kitchen fixed a mix-up` },
 };
 let lang = 'vi';
 try { if (localStorage.getItem('mekoniq.lang') === 'en') lang = 'en'; } catch (e) {}
@@ -154,7 +154,10 @@ $('list').addEventListener('click', e => {
   armed(`c-${m}-${s}`, () => send({ type: 'cancelStop', mission: m, stop: s, table: T, why: 'customer', by: 'Khách ' + pname(T) + ' (QR)' }), render);
 });
 render();
-connect(m => { if (m.type === 'state' || m.type === 'site') render(); });
+connect(m => {
+  if (m.type === 'event' && m.table === T && m.moved) toast(tr('moved')(tr('table')(short(m.moved))), 'warn');   // spec 6.9: the station moved our item to another table
+  if (m.type === 'state' || m.type === 'site') render();
+});
 setInterval(render, 1000);
 </script>
 </body></html>

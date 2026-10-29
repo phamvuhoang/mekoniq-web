@@ -44,7 +44,7 @@ const clock = t => new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', mi
 const ACTION_VI = { load: 'Xếp đồ lên khay', handoff: 'Giao cho khách', collect: 'Thu chén đĩa', unload: 'Dỡ chén đĩa', return: 'Trả đồ bị huỷ', standby: 'Chờ lệnh', guide: 'Dẫn khách' };
 
 function missionOf(r) { return r && r.mission ? App.state.missions.find(m => m.id === r.mission) : null; }
-const etaSec = r => Math.round((r.rem || 0) / ((App.site.sim || {}).speed || 1) / (r.slow ? 0.5 : 1));   // remaining route length, not straight line
+const etaSec = r => Math.round((r.rem || 0) / ((App.site.sim || {}).speed || 1) / (r.slow || 1));   // remaining route length, not straight line
 // Simulator robots drive on the hand-drawn floor plan (web demo); a Valetudo-only site shows the robot's own map instead.
 const vnd = n => String(n).replace(/\B(?=(\d{3})+$)/g, '.') + 'đ';
 const feat = f => !!App.site && !!(App.site.features || {})[f];   // phase-2 features, off unless site.features turns them on
@@ -106,7 +106,7 @@ function startClock() {
 }
 // Alert strip rows (one per alert). extra(a) may return more button HTML placed before "Đã biết".
 function strip(alerts, extra) {
-  return (alerts || []).map(a => `<div class="strip${a.level === 'error' ? ' error' : ''}"><span class="kind">${a.level === 'error' ? 'Lỗi' : 'Cảnh báo'}</span><span class="grow">${esc(a.text)}</span><span class="t">${clock(a.t)}</span>${extra ? extra(a) : ''}<button class="btn sm dark" data-act="ack" data-id="${esc(a.id)}">Đã biết</button></div>`).join('');
+  return (alerts || []).map(a => `<div class="strip${a.level === 'error' ? ' error' : ''}"><span class="kind">${a.level === 'error' ? 'Lỗi' : 'Cảnh báo'}</span><span class="grow">${esc(a.text)}</span><span class="t">${clock(a.t)}</span>${extra ? extra(a) : ''}<button class="btn sm dark" data-act="ack" data-id="${esc(a.id)}">${/^call-(bill|paid)-/.test(a.key) ? 'Đã thu tiền' : 'Đã biết'}</button></div>`).join('');   // acking a bill / payment closes the table's orders
 }
 // What a table tile shows: robot standing there, robot on its way, queued, or free.
 function tableState(t) {
