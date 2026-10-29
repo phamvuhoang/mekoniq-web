@@ -19,6 +19,7 @@
   .card { min-height: 0; }
   .col { display: flex; flex-direction: column; gap: 10px; }
   .id { font: 500 12px var(--mono); color: var(--muted); }
+  .id.vi { font-family: var(--font); }
   input[type=number], select { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 8px 10px; min-height: 40px; }
   input[type=number] { width: 84px; }
   .seg.sm button { min-height: 38px; padding: 6px 12px; font-size: 13px; }
@@ -227,7 +228,7 @@ document.addEventListener('click', e => {
 function renderPoints() {
   const order = ['station', 'dish', 'dock', 'table'];
   const R = valRobots(), r = curRobot();
-  $('robotPick').innerHTML = R.length > 1 ? R.map(x => `<button data-robot="${x.id}" aria-pressed="${r && r.id === x.id}">${x.id}</button>`).join('') : '';
+  $('robotPick').innerHTML = R.length > 1 ? R.map(x => `<button data-robot="${esc(x.id)}" aria-pressed="${r && r.id === x.id}">${esc(x.id)}</button>`).join('') : '';
   $('mapTitle').textContent = r ? `Bản đồ robot ${r.id} · chạm để đặt điểm đang chọn` : 'Bản đồ robot · chỉ có với robot thật (Valetudo)';
   const ids = order.flatMap(kind => Object.keys(D.points).filter(k => D.points[k].kind === kind).sort());
   $('ptCount').textContent = 'Điểm dừng · ' + ids.length;
@@ -272,7 +273,9 @@ function drawMap() {
   if (p) {
     const pt = r && r.valetudo.points[sel], k = 'del-' + sel;
     $('selName').textContent = p.name;
-    $('selXY').textContent = p.kind === 'dock' ? 'lấy từ robot' : !r ? '' : pt ? `x ${pt.x} · y ${pt.y} cm` : 'chưa định vị — chạm lên bản đồ';
+    const xy = p.kind !== 'dock' && r && pt;
+    $('selXY').textContent = p.kind === 'dock' ? 'lấy từ robot' : !r ? '' : xy ? `x ${pt.x} · y ${pt.y} cm` : 'chưa định vị — chạm lên bản đồ';
+    $('selXY').classList.toggle('vi', !xy);   // JetBrains Mono has no Vietnamese glyphs: mono for coordinates only
     $('delPoint').disabled = p.kind === 'dish';
     $('delPoint').textContent = isArmed(k) ? 'Xoá điểm?' : 'Xoá điểm';
     $('delPoint').classList.toggle('armed', isArmed(k));

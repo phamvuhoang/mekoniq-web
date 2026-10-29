@@ -5,7 +5,7 @@
 <link rel="icon" href="logo.svg"><link rel="stylesheet" href="brand.css">
 <style>
   body { background: var(--bg-app); }
-  .phone { max-width: 480px; min-height: 100dvh; margin: auto; background: #f6f8f4; display: flex; flex-direction: column; }
+  .phone { max-width: 480px; min-height: 100vh; min-height: 100dvh; margin: auto; background: #f6f8f4; display: flex; flex-direction: column; }
   @media (min-width: 481px) { .phone { border-inline: 1px solid var(--line); } }
   header.hd { display: flex; align-items: center; gap: 10px; padding: 14px 20px; }
   header.hd #lang { margin-left: auto; display: flex; gap: 6px; }
@@ -54,7 +54,7 @@ function item(m, i, s) {
   else if (m.status === 'queued') [text, step] = ['Đang chờ robot', 1];
   else if (!m.loaded) [text, step] = [`${pname(m.stops[0].p)} đang chuẩn bị · robot ${m.robot} tới lấy`, 2];
   else if (m.cur === i && r.phase === 'atStop') [text, step, tone] = [`Robot ${m.robot} đã tới bàn — mời lấy món ở khay ${s.tray}`, 4, 'ok'];
-  else if (m.cur === i) [text, step] = [`Robot ${m.robot} đang tới · khoảng ${etaSec(r)} giây`, 3];
+  else if (m.cur === i) [text, step] = [`Robot ${m.robot} đang tới · ${etaSec(r) ? `khoảng ${etaSec(r)} giây` : 'sắp tới'}`, 3];
   else [text, step] = [`Robot ${m.robot} đang giao bàn khác trước, sau đó tới bàn bạn`, 3];
   if (open && r && r.halt) text += ' (robot đang tạm dừng)';
   const k = `c-${m.id}-${i}`;

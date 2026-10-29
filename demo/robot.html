@@ -72,7 +72,7 @@
   .mvhead .face { width: 96px; flex: none; }
   .mvhead .eyebrow { margin: 0 !important; }
   .mvhead p { margin: 4px 0 0; font-weight: 700; color: var(--gray); }
-  .dest { margin: 10px 0 4px; font-size: min(150px, 100cqw / (var(--n) * .64)); font-weight: 900; line-height: 1; letter-spacing: -.03em; color: var(--deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dest { margin: 10px 0 4px; font-size: 96px; font-size: min(150px, 100cqw / (var(--n) * .64)); font-weight: 900; line-height: 1; letter-spacing: -.03em; color: var(--deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .mv #timer { margin: 0; font-size: 22px; font-weight: 800; color: var(--ink); min-height: 1.4em; }
   .yield { margin-top: 18px; padding: 14px 18px; border-radius: 16px; background: var(--accent); color: var(--alert-ink); font-size: 19px; font-weight: 800; }
   .route h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--gray); }
@@ -115,7 +115,7 @@
     .split .eyebrow, .split .chips { justify-content: center; }
     .split .lead { margin-inline: auto; }
     .moving { grid-template-columns: minmax(0, 1fr); align-content: center; }
-    .dest { font-size: min(96px, 100cqw / (var(--n) * .64)); }
+    .dest { font-size: 96px; font-size: min(96px, 100cqw / (var(--n) * .64)); }
   }
   :root[data-orient=portrait] .screen > .body { grid-template: minmax(0, 1fr) auto / minmax(0, 1fr); }
   :root[data-orient=portrait] #acts { flex-direction: row; flex-wrap: wrap; border-left: 0; border-top: 1px solid var(--line); padding: 16px; }
@@ -129,7 +129,7 @@
   :root[data-orient=portrait] .split .eyebrow, :root[data-orient=portrait] .split .chips { justify-content: center; }
   :root[data-orient=portrait] .split .lead { margin-inline: auto; }
   :root[data-orient=portrait] .moving { grid-template-columns: minmax(0, 1fr); align-content: center; }
-  :root[data-orient=portrait] .dest { font-size: min(96px, 100cqw / (var(--n) * .64)); }
+  :root[data-orient=portrait] .dest { font-size: 96px; font-size: min(96px, 100cqw / (var(--n) * .64)); }
 </style>
 </head><body>
 <div class="screen">
@@ -355,7 +355,7 @@ function render() {
 function tick() {
   const t = $('timer');
   if (!t || !r) return;
-  if (r.phase === 'toStop') t.textContent = isValetudo() ? '' : `Còn khoảng ${etaSec(r)} giây · ~${etaSec(r)} s`;   // Valetudo reports no remaining route
+  if (r.phase === 'toStop') { const n = etaSec(r); t.textContent = isValetudo() ? '' : n ? `Còn khoảng ${n} giây · ~${n} s` : 'Sắp tới · Arriving'; }   // Valetudo reports no remaining route
   if (r.phase === 'atStop') { const n = Math.max(0, App.site.timing.handoffSec - Math.round((serverNow() - r.waitSince) / 1000)); t.textContent = `Robot tự quay về sau ${n} giây · Returns in ${n} s`; }
 }
 

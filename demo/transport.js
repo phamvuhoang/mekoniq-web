@@ -23,11 +23,15 @@ const Transport = (() => {
       fetch('site.json').then(r => r.json())]);
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
-    // seed = factory default (siteReset target); site = what setup.html saved, like global.site || seed on Node-RED.
-    let site = (saved && saved.site) || seed;
+    // seed = this deploy's site.json (siteReset target); custom = what setup.html saved, like global.site || seed on Node-RED.
+    // Only custom is stored, tagged with its seed's fingerprint: a new deploy's site.json is never pinned by an old visit.
+    const fp = [...JSON.stringify(seed)].reduce((h, ch) => Math.imul(h, 31) + ch.charCodeAt(0) | 0, 0);
+    let custom = saved && saved.custom && saved.seedFp === fp ? saved.custom : null;
+    if (saved && saved.custom && !custom) saved = null;   // config made for an older site.json: start the demo fresh
+    let site = custom || seed;
     const st = (saved && saved.st) || O.init(site, Date.now());
     const sim = (saved && saved.sim) || S.init(site);
-    const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ st, sim, site })); } catch (e) {} };
+    const save = () => { try { localStorage.setItem(KEY, JSON.stringify(custom ? { st, sim, custom, seedFp: fp } : { st, sim })); } catch (e) {} };
 
     const deliver = ui => {
       for (const u of ui) {
@@ -36,8 +40,10 @@ const Transport = (() => {
       }
     };
     const run = inp => {
+      // "Xoá dữ liệu demo" also drops the saved config: back to site.json before the orchestrator rebuilds its state.
+      if (custom && inp.source === 'ui' && inp.data && inp.data.type === 'reset') { custom = null; site = seed; deliver([{ payload: JSON.stringify({ type: 'site', site }) }]); }
       const r = O.handle(st, site, inp, Date.now());
-      if (r.site) { site = r.site; save(); }   // config saved from setup.html
+      if (r.site) { site = custom = r.site; save(); }   // config saved from setup.html
       deliver(r.ui);
       for (const cmd of r.cmds) for (const e of S.handle(sim, site, cmd, Date.now())) run({ source: 'adapter', data: e });
     };

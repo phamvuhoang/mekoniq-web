@@ -48,6 +48,7 @@
   .pickrow .lbl { font-size: 12px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--gray); }
   .pickrow .txt { font-weight: 800; color: var(--ink); }
   .pickrow .cnt { margin-left: auto; font: 500 14px var(--mono); color: var(--gray); }
+  .pickrow .cnt.vi { font-family: var(--font); }
   .chip { min-height: 40px; padding: 7px 16px; border: 1.5px solid var(--line); border-radius: 999px; background: var(--card); font-weight: 800; white-space: nowrap; }
   .chip[aria-pressed="true"] { background: var(--green); border-color: var(--green); color: var(--card); }
   #grid { --cols: 4; flex: 1; }
@@ -344,6 +345,9 @@ function receiveBtn(m, cls) {
   const s = backStop(m), t = '✓ ' + (s.a === 'return' ? 'Đã nhận lại đồ' : 'Đã dỡ chén đĩa');
   return `<button class="${cls}" data-act="receive" data-m="${m.id}">${cls.includes('act') ? L(t, `${m.robot} tại ${esc(pname(s.p))} · bấm để cho robot về`) : t}</button>`;
 }
+// A specific robot whose job is locked (food coming back / dirty dishes on board): shown with an explanation, no button.
+const lockedOf = id => id !== 'any' && App.state.missions.find(m => m.robot === id && locked(m) && !arrived(m));
+const lockWhy = m => backStop(m) ? 'Đang mang đồ về — chờ nhận lại' : 'Đang chở chén bẩn — không huỷ';
 function cancelTarget() {
   const ms = App.state.missions.filter(m => !locked(m) || arrived(m));
   if (F.robot !== 'any') return ms.find(m => m.robot === F.robot);
@@ -370,7 +374,7 @@ function renderDesk() {
   setHTML($('queue'), ms.map(m => {
     const [t, c] = missionStatus(m), k = 'cm-' + m.id;
     const x = arrived(m) ? receiveBtn(m, 'btn sm primary')
-      : locked(m) ? `<span class="lock" title="${backStop(m) ? 'Đang mang đồ về — chờ nhận lại' : 'Đang chở chén bẩn — không huỷ'}">🔒</span>`
+      : locked(m) ? `<span class="lock" title="${lockWhy(m)}">🔒</span>`
       : `<button class="x ${isArmed(k) ? 'armed' : ''}" data-act="cancel" data-m="${m.id}" title="Huỷ lệnh" aria-label="Huỷ lệnh">${isArmed(k) ? 'Huỷ?' : '✕'}</button>`;
     return `<li><b>${m.urgent ? '<span class="pill warn">Gấp</span>' : ''}${esc(m.label)}</b>${x}<small class="${c}">${m.robot ? m.robot + ' · ' : ''}${esc(t)}</small></li>`;
   }).join('') || '<li class="empty muted">Không có lệnh nào</li>');
@@ -379,7 +383,7 @@ function renderDesk() {
   setHTML($('tasks'), Object.entries(TASKS).map(([k, [vi, en]]) => `<button class="task" data-f="tab:${k}" ${press(F.tab === k)}>${L(vi, en)}</button>`).join(''));
   setHTML($('pick'), (F.tab === 'deliver' ? `<span class="lbl">Lấy tại</span>${stations.map(s => `<button class="chip" data-f="from:${s}" ${press(F.from === s)}>${esc(P[s].name)}</button>`).join('')}`
     : F.tab === 'bus' ? `<span class="txt">Mang chén về ${esc(pname(S.dishPoint))}</span>` : '<span class="txt">Chọn khu hoặc bàn</span>') +
-    `<span class="cnt">${F.tab === 'deliver' ? `${F.tables.length} / ${S.trays} khay` : 'Chọn 1'}</span>`);
+    (F.tab === 'deliver' ? `<span class="cnt">${F.tables.length} / ${S.trays} khay</span>` : '<span class="cnt vi">Chọn 1</span>'));
   const spots = F.tab === 'summon' ? Object.keys(P).filter(k => ['station', 'dish'].includes(P[k].kind)).map(k =>
     `<button class="tt spot" data-f="t:${k}" ${press(F.to === k)}><span class="lbl">Khu</span><b>${esc(P[k].name)}</b><span class="st">Gọi robot tới</span></button>`) : [];
   setHTML($('grid'), spots.concat(tableIds().map(t => {
@@ -399,11 +403,11 @@ function renderDesk() {
     const n = F.tables.length, go = { deliver: [`Gọi robot · giao ${n} bàn`, `Call robot · deliver ${n} table${n > 1 ? 's' : ''}`], bus: ['Gọi robot thu dọn', 'Call robot to bus'], summon: ['Gọi robot tới', 'Summon robot'] }[F.tab];
     setHTML($('pvSend'), `<button class="act primary send" data-act="create">${L(...go)}</button><button class="act outline" data-act="unpick">${L('Bỏ chọn', 'Clear selection')}</button>`);
   } else {
-    const tgt = cancelTarget(), k = tgt && 'cm-' + tgt.id, [t, c] = tgt ? missionStatus(tgt) : [];
-    setHTML($('pvHead'), `<p class="eyebrow sm">Lệnh gần nhất của trạm này</p>` + (tgt
-      ? `<h2>${esc(tgt.label)}</h2><p class="rl">Robot: ${tgt.robot || '—'}<span class="pill ${c}">${esc(t)}</span></p>`
-      : '<h2 class="muted">Không có lệnh để thu hồi</h2>') + '<p class="rl small">Chọn trên lưới để tạo lệnh mới.</p>');
-    // cancelTarget() skips locked missions (their 🔒 shows in the queue), so a target here is arrived or cancellable.
+    const tgt = cancelTarget(), lk = !tgt && lockedOf(F.robot), shown = tgt || lk, k = tgt && 'cm-' + tgt.id, [t, c] = shown ? missionStatus(shown) : [];
+    setHTML($('pvHead'), `<p class="eyebrow sm">Lệnh gần nhất của trạm này</p>` + (shown
+      ? `<h2>${esc(shown.label)}</h2><p class="rl">Robot: ${shown.robot || '—'}<span class="pill ${c}">${esc(t)}</span></p>`
+      : '<h2 class="muted">Không có lệnh để thu hồi</h2>') + (lk ? `<p class="rl">${lockWhy(lk)}</p>` : '') + '<p class="rl small">Chọn trên lưới để tạo lệnh mới.</p>');
+    // cancelTarget() skips locked missions, so a target here is arrived or cancellable; a locked one (lk) gets text only (spec 4.2).
     setHTML($('pvSend'), !tgt ? '' : arrived(tgt) ? receiveBtn(tgt, 'act primary send')
       : `<button class="act danger send ${isArmed(k) ? 'armed' : ''}" data-act="cancel" data-m="${tgt.id}">${isArmed(k) ? L('Chạm lần nữa để thu hồi', 'Tap again to confirm') : L('Thu hồi robot', 'Recall')}</button>`);
   }
@@ -466,7 +470,7 @@ function buildMap() {
   $('legend').innerHTML = `<div class="legend">${[['', 'Lối đi'], ['narrow', 'Lối hẹp'], ['slow', 'Đi chậm']].map(laneKey).join('')}` +
     [['ok', 'Rảnh'], ['go', 'Đang chạy'], ['warn', 'Đang chờ'], ['danger', 'Cần xử lý']].map(([t, l]) => `<span><i style="background:${TONE[t]}"></i>${l}</span>`).join('') + '</div>';
   renderMode();
-  $('map').addEventListener('click', e => {
+  $('map').onclick = e => {   // onclick, not addEventListener: buildMap runs again after each config save
     if (MODE !== 'pick') {
       const ob = e.target.closest('[data-ob]');
       if (ob) return send({ type: 'obstacle', remove: +ob.dataset.ob, by: by() });
@@ -479,8 +483,8 @@ function buildMap() {
     if (k === 't') return choose('t', v);
     if (F.tab === 'deliver' && k === 'from') return choose('from', v);
     if (F.tab === 'summon') return choose('to', v);
-  });
-  mapBuilt = true;
+  };
+  mapBuilt = true; netV = -1;
 }
 // Valetudo-only site: the robot's own map (vmap.js) instead of the hand-drawn floor plan; tapping a table picks it.
 let vm = null, vmapT = 0, vmapRobot = null;
@@ -517,6 +521,7 @@ function renderMap() {
   const busy = new Set((App.state ? App.state.missions : []).flatMap(m => m.stops.filter(s => s.status === 'pending' || s.status === 'active').map(s => s.p)));
   for (const id of tableIds()) {
     const el = $('pt-' + id);
+    if (!el) continue;
     el.classList.toggle('sel', sel.has(id));
     el.classList.toggle('busy', busy.has(id));
   }
@@ -524,6 +529,7 @@ function renderMap() {
   let paths = '';
   for (const r of App.state.robots) {
     const g = $('rb-' + r.id);
+    if (!g) continue;   // robot removed from the config but still finishing a job
     g.style.transform = `translate(${r.x}px, ${r.y}px)`;
     g.querySelector('circle').setAttribute('fill', TONE[robotStatus(r)[1]]);
     g.querySelector('.ring').toggleAttribute('hidden', !(r.nav === 'wait' || r.halt === 'blocked'));
@@ -558,7 +564,7 @@ function missionHTML(m) {
   const k = 'cm-' + m.id;
   return `<div class="mission ${m.urgent ? 'urgent' : ''}">
     <div class="mrow"><b>${esc(m.label)}</b>${m.urgent ? '<span class="pill warn">GẤP</span>' : ''}</div>
-    <div class="mrow small"><span class="muted">${esc(m.by)} · ${ago(m.createdAt)} trước</span><span class="pill ${tone}">${m.robot ? m.robot + ' · ' : ''}${esc(stText)}</span></div>
+    <div class="mrow small"><span class="muted">${esc(m.by)} · <span data-ago="${m.createdAt}"></span></span><span class="pill ${tone}">${m.robot ? m.robot + ' · ' : ''}${esc(stText)}</span></div>
     ${m.note ? `<div class="small">📝 ${esc(m.note)}</div>` : ''}
     <div class="stops">${stops}</div>
     <div class="mrow">${m.loaded ? '<span class="small muted">Đồ đang trên khay</span>' : '<span></span>'}
@@ -575,14 +581,14 @@ function robotHTML(r) {
   const acts = [];
   if (r.halt === 'paused') acts.push(`<button class="btn sm primary" data-act="resume" data-r="${r.id}">Chạy tiếp</button>`);
   else if (!r.halt && !r.offline) acts.push(`<button class="btn sm" data-act="pause" data-r="${r.id}">Tạm dừng</button>`);
-  if (r.halt === 'blocked' || r.nav === 'wait') acts.push(`<button class="btn sm ${r.halt ? 'primary' : ''}" data-act="clear" data-r="${r.id}">Đã dọn lối đi</button>`);
+  if ((r.halt === 'blocked' || r.nav === 'wait') && r.why !== 'noroute') acts.push(`<button class="btn sm ${r.halt ? 'primary' : ''}" data-act="clear" data-r="${r.id}">Đã dọn lối đi</button>`);
   if (r.halt === 'estop') acts.push(`<span class="small">Nhả dừng tại màn hình robot</span>`);
   if (m) acts.push(`<button class="btn sm ${isArmed(k) ? 'armed' : ''}" data-act="manual" data-r="${r.id}" title="Nhân viên tự hoàn tất việc, robot về trạm">${isArmed(k) ? 'Xác nhận?' : 'Xử lý thủ công'}</button>`);
   acts.push(`<a class="btn sm" href="robot.html?robot=${r.id}" target="_blank">Màn robot ↗</a>`);
-  return `<div class="robot ${r.halt ? 'halt' : ''}">
+  return `<div class="robot ${r.halt ? 'halt' : ''}" data-rid="${esc(r.id)}">
     <div class="mrow"><span class="rid"><i style="background:${TONE[tone]}"></i>${r.id}</span><span class="pill ${tone}">${esc(t)}</span></div>
-    <div class="bat ${bat < App.site.timing.lowBattery ? 'low' : ''}"><div style="width:${bat}%"></div></div>
-    <div class="mrow small"><span class="muted">${m ? esc(m.label) : 'Không có nhiệm vụ'}</span><span>Pin ${bat}%${r.charging ? ' · sạc' : ''}${r.phase === 'toStop' ? ' · ~' + etaSec(r) + 's' : ''}</span></div>
+    <div class="bat ${bat < App.site.timing.lowBattery ? 'low' : ''}"><div></div></div>
+    <div class="mrow small"><span class="muted">${m ? esc(m.label) : 'Không có nhiệm vụ'}</span><span class="live"></span></div>
     <div class="acts">${acts.join('')}</div></div>`;
 }
 
@@ -599,8 +605,8 @@ function renderOps() {
     [`${k.cancelledCustomer}/${k.cancelledStaff}/${k.timeout}`, 'Huỷ KH/NV/giờ', 'Huỷ: khách/nhân viên/quá giờ'],
   ];
   setHTML($('kpi'), tiles.map(([v, l, full]) => `<div class="kpi" title="${full}"><b>${v}</b><span>${l}</span></div>`).join(''));
-  // Blocked robot (alert key blk-<robot>): the strip also offers "Đã dọn lối đi" -> the usual clear.
-  setHTML($('strips'), strip(App.state.alerts, a => { const r = App.state.robots.find(x => a.key === 'blk-' + x.id);
+  // Blocked robot (alert key blk-<robot>): the strip also offers "Đã dọn lối đi" -> the usual clear; not for noroute (same key), clearing can't fix it.
+  setHTML($('strips'), strip(App.state.alerts, a => { const r = App.state.robots.find(x => a.key === 'blk-' + x.id && x.why !== 'noroute');
     return r ? `<button class="btn sm dark" data-act="clear" data-r="${r.id}">Đã dọn lối đi</button>` : ''; }));
 }
 
@@ -627,6 +633,18 @@ function renderPanel() {
     : PTAB === 'missions' ? ms.map(missionHTML).join('') || '<p class="empty">Không có nhiệm vụ nào</p>'
     : PTAB === 'log' ? App.state.log.map(l => `<div class="logrow"><time>${clock(l.t)}</time><span class="${l.level}">${esc(l.text)}</span></div>`).join('') || '<p class="empty">Chưa có hoạt động</p>'
     : simHTML());
+  live();
+}
+// Battery, ETA and "x giây trước" change every tick: filled in after setHTML so buttons are not re-created each second.
+function live() {
+  for (const el of $('pbody').querySelectorAll('[data-rid]')) {
+    const r = App.state.robots.find(x => x.id === el.dataset.rid);
+    if (!r) continue;
+    const bat = Math.round(r.battery);
+    el.querySelector('.bat div').style.width = bat + '%';
+    el.querySelector('.live').textContent = `Pin ${bat}%${r.charging ? ' · sạc' : ''}${r.phase === 'toStop' ? ' · ~' + etaSec(r) + 's' : ''}`;
+  }
+  for (const el of $('pbody').querySelectorAll('[data-ago]')) el.textContent = ago(+el.dataset.ago) + ' trước';
 }
 $('ptabs').onclick = e => { const b = e.target.closest('[data-ptab]'); if (b) { PTAB = b.dataset.ptab; renderPanel(); $('pbody').scrollTop = 0; } };
 $('pbody').addEventListener('click', e => { const b = e.target.closest('[data-simr]'); if (b) { SIMR = b.dataset.simr; renderPanel(); } });
@@ -658,6 +676,7 @@ function hears(e) { return e.stationSound === 'alert' || !e.point || !role().hom
 let first = true;
 connect(m => {
   if (m.type === 'site') {
+    mapBuilt = false;   // robots / tables may have changed: rebuild the floor plan on the next render
     if (first) { first = false; if (!me) openSetup(); applyRole(); }
     return;
   }
