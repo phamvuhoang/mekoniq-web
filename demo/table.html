@@ -151,7 +151,7 @@ $('list').addEventListener('click', e => {
   const b = e.target.closest('[data-m]');
   if (!b) return;
   const m = +b.dataset.m, s = +b.dataset.s;
-  armed(`c-${m}-${s}`, () => send({ type: 'cancelStop', mission: m, stop: s, why: 'customer', by: 'Khách ' + pname(T) + ' (QR)' }), render);
+  armed(`c-${m}-${s}`, () => send({ type: 'cancelStop', mission: m, stop: s, table: T, why: 'customer', by: 'Khách ' + pname(T) + ' (QR)' }), render);
 });
 render();
 connect(m => { if (m.type === 'state' || m.type === 'site') render(); });

@@ -64,7 +64,12 @@ function log(c, level, text, robot) {
 function alert(c, key, level, text, robot) {
   if (c.st.alerts.some(a => a.key === key)) return;
   c.st.alerts.unshift({ id: ++c.st.alertSeq, key, t: c.now, level, text, robot });
-  c.st.alerts.length = Math.min(c.st.alerts.length, 20);
+  // Full list: drop the oldest warning first, so guest calls / orders never push out an e-stop, offline or blocked alert.
+  while (c.st.alerts.length > 20) {
+    let i = c.st.alerts.length - 1;
+    while (i > 0 && c.st.alerts[i].level === 'error') i--;
+    c.st.alerts.splice(i > 0 ? i : c.st.alerts.length - 1, 1);
+  }
 }
 // Phase-2 features are opt-in per site (site.features); the UI hides them too, this is the server-side gate.
 const feature = (c, f, by) => (c.site.features || {})[f] ? true : (log(c, 'warn', `${by}: tính năng "${f}" đang tắt — bỏ qua`), false);
@@ -205,9 +210,9 @@ function cancelMission(c, m, by, why) {
   advance(c, m);
 }
 
-function cancelStop(c, m, i, by, why) {
+function cancelStop(c, m, i, by, why, d = {}) {
   const s = m.stops[i];
-  if (!s || s.a !== 'handoff' || !open(s)) return;
+  if (!s || s.a !== 'handoff' || !open(s) || (d.table && d.table !== s.p)) return;   // QR page: stop may have been moved to another table
   const here = m.status === 'active' && m.cur === i && c.st.robots[m.robot].phase === 'atStop';
   dropStop(c, m, i, by, why);
   const tail = m.loaded ? ` — ${m.robot} mang khay ${s.tray} về ${pname(c, m.stops[0].p)}` : ' (chưa xếp khay)';
@@ -379,7 +384,7 @@ function reroute(c, r, why) {
 // Waiting-time rules while a robot stands at a stop.
 function timers(c) {
   const T = c.site.timing;
-  c.st.orders = c.st.orders.filter(o => o.status !== 'paid' && c.now - o.t < 24 * 3600 * 1000);
+  c.st.orders = c.st.orders.filter(o => c.now - o.t < 24 * 3600 * 1000);   // settled ones leave on ack (fromUI 'ack')
   for (const r of Object.values(c.st.robots)) {
     if (r.phase !== 'atStop' || r.halt || r.offline) continue;
     const m = findM(c, r.mission), s = m.stops[m.cur];
@@ -450,7 +455,7 @@ function fromUI(c, d, session, seed) {
     case 'cancel':
       if (m && !(m.loaded && m.kind === 'bus')) cancelMission(c, m, by, 'staff');   // dirty dishes still go to the dish area
       return;
-    case 'cancelStop': if (m) cancelStop(c, m, d.stop, by, d.why === 'customer' ? 'customer' : 'staff'); return;
+    case 'cancelStop': if (m) cancelStop(c, m, d.stop, by, d.why === 'customer' ? 'customer' : 'staff', d); return;
     case 'confirm': if (r) confirm(c, r, d, by); return;
     case 'dispatch': if (r) dispatch(c, r, d, by); return;
     case 'call': return call(c, d, by);
@@ -515,7 +520,14 @@ function fromUI(c, d, session, seed) {
       log(c, 'error', `${by} chuyển ${mm.label} sang xử lý thủ công`, r.id);
       return finish(c, mm, 'failed');
     }
-    case 'ack': st.alerts = st.alerts.filter(a => a.id !== d.alert); return;
+    case 'ack': {
+      const a = st.alerts.find(x => x.id === d.alert);
+      st.alerts = st.alerts.filter(x => x.id !== d.alert);
+      // Staff handled "xin hoá đơn" / "đã chuyển khoản": the table's party is settled, the next party starts with no bill.
+      const paid = a && /^call-(bill|paid)-(.+)$/.exec(a.key);
+      if (paid) st.orders = st.orders.filter(o => o.table !== paid[2]);
+      return;
+    }
     case 'siteSave': case 'siteReset': return saveSite(c, d, session, seed, by);
     case 'probe':   // setup.html: drive an idle robot to a spot to check a taught point
       if (r && !r.mission && r.phase === 'idle' && !r.halt && !r.offline && isFinite(d.x) && isFinite(d.y)) {

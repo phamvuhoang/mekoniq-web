@@ -294,15 +294,17 @@ function payView(r) {
   const qr = navigator.onLine && P.bank && P.account
     ? `<img src="https://img.vietqr.io/image/${encodeURIComponent(P.bank)}-${encodeURIComponent(P.account)}-compact2.png?amount=${total}&addInfo=${encodeURIComponent(info2)}&accountName=${encodeURIComponent(P.name || '')}" alt="Mã VietQR">`
     : P.qr ? `<img src="${esc(P.qr)}" alt="Mã QR chuyển khoản">` : '';
+  // Wi-Fi up but no Internet: navigator.onLine stays true, so fall back to the static QR (or hide) when vietqr.io fails.
+  const qrImg = qr.replace('<img src="https://', P.qr ? `<img data-fb="${esc(P.qr)}" onerror="this.onerror=null;this.src=this.dataset.fb" src="https://` : '<img onerror="this.remove()" src="https://');
   return { bar: `${pname(t)} · Thanh toán`, sub: 'Pay the bill', tone: 'go',
     body: `<div class="pay"><div class="card bill"><p class="eyebrow">Hoá đơn · Bill — ${esc(pname(t))}</p><table>
       ${Object.entries(lines).map(([id, l]) => `<tr><td>${esc(name(id))} ×${l.qty}</td><td>${vnd(l.sum)}</td></tr>`).join('')}
       <tr class="tot"><td>Tổng · Total</td><td>${vnd(total)}</td></tr></table></div>
-      <div class="qr">${qr}<div class="amt">${vnd(total)}</div>
+      <div class="qr">${qrImg}<div class="amt">${vnd(total)}</div>
         <div class="acct">${P.account ? `${esc(P.bank)} · ${esc(P.account)}${P.name ? ' · ' + esc(P.name) : ''}` : 'Vui lòng thanh toán với nhân viên · Please pay staff'}</div>
         <small class="muted">Nội dung · Note: ${esc(info2)}</small></div></div>`,
     acts: act('primary', 'Tôi đã chuyển khoản', "I've paid", 'paid', `data-amt="${total}"`)
-      + act('outline', 'Tiền mặt / thẻ', 'Cash or card · call staff', 'call', `data-p="${esc(t)}"`)
+      + act('outline', 'Tiền mặt / thẻ', 'Cash or card · call staff', 'call', `data-p="${esc(t)}" data-w="bill"`)
       + act('outline', 'Quay lại', 'Back', 'payBack') };
 }
 // Call staff to a table (spec 6.1): needs features.call.
@@ -359,7 +361,7 @@ function view(r, m) {
       body: split(trays([s.tray], trayLabels(m)), `${esc(place)} · Đã tới`, `Mời quý khách lấy món ở Khay ${s.tray}`, `Please take your order from Tray ${s.tray}`,
         `${m.note ? `<div class="card note"><small>Ghi chú · Note</small>${esc(m.note)}</div>` : ''}<p class="lead" id="timer"></p>${batChip(r)}`, 'hand'),
       acts: act('primary', 'Đã nhận món', 'Got it, thanks', 'confirm')
-        + armAct('cx', 'warn', ['Trả lại bếp', 'Not mine, send back'], ['Chạm lần nữa · robot mang món về', 'Tap again to send it back'], 'cancelStop') + orderBtn(r) + payBtn(r) + callBtn(s.p) };
+        + armAct('cx', 'warn', ['Trả lại bếp', 'Not mine, send back'], ['Chạm lần nữa · robot mang món về', 'Tap again to send it back'], 'cancelStop') + callBtn(s.p) };   // no order/pay here: the handoff timer keeps running
     if (s.a === 'load') {
       const open = m.stops.filter(x => x.a === 'handoff' && !isOff(x)).map(x => x.tray);
       return { bar: `${place} · Xếp món lên khay`, sub: 'Load the trays', tone: 'go',
@@ -542,7 +544,7 @@ $('main').addEventListener('click', e => {
   if (a === 'guideBack') { guiding = false; render(); }
   if (a === 'guideGo' && gpick) { send({ type: 'create', kind: 'guide', to: gpick, ...base, by: 'Khách (màn ' + ID + ')' }); guiding = false; gpick = null; }
   if (a === 'speed') { send({ type: 'speed', ...base, slow: !r.slow }); toast(r.slow ? 'Đi bình thường · Normal speed' : 'Đi chậm hơn · Slowing down'); }
-  if (a === 'call') { send({ type: 'call', point: b.dataset.p, what: 'staff', by: 'Khách ' + pname(b.dataset.p) + ' (màn ' + ID + ')' }); toast('Đã gọi nhân viên · Staff called'); }
+  if (a === 'call') { send({ type: 'call', point: b.dataset.p, what: b.dataset.w || 'staff', by: 'Khách ' + pname(b.dataset.p) + ' (màn ' + ID + ')' }); toast('Đã gọi nhân viên · Staff called'); }
   if (a === 'staff') toast('Gọi robot từ máy trạm · Call the robot from a station');
 });
 

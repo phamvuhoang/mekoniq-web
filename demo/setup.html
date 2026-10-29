@@ -240,7 +240,7 @@ const $ = id => document.getElementById(id);
 let BY = 'Quản lý ca';
 try { const s = JSON.parse(localStorage.getItem('mekoniq.station')); if (s && s.name) BY = s.name; } catch (e) {}
 const clone = o => JSON.parse(JSON.stringify(o));
-const KIND_VI = { table: 'Bàn', station: 'Trạm', dish: 'Rửa', dock: 'Sạc' };
+const KIND_VI = { table: 'Bàn', station: 'Trạm', dish: 'Rửa', dock: 'Sạc', entrance: 'Cửa' };
 const HINT = {
   arriveCm: 'Dừng cách điểm ≤ bấy nhiêu cm thì coi là đã tới', nomoveSec: 'Sau lệnh mà chừng ấy giây robot chưa chạy → xét theo vị trí (rời dock chậm: tăng lên 20–30)',
   tripSec: 'Một chuyến chạy quá chừng ấy giây → bị chặn (lưới cuối)', retrySec: 'Bị chắn: thử đi tiếp sau bấy nhiêu giây', retryMax: 'Thử bấy nhiêu lần rồi mới báo trạm',

@@ -401,7 +401,7 @@ function renderDesk() {
   else setHTML($('pick'), (F.tab === 'deliver' ? `<span class="lbl">Lấy tại</span>${stations.map(s => `<button class="chip" data-f="from:${s}" ${press(F.from === s)}>${esc(P[s].name)}</button>`).join('')}`
     : F.tab === 'bus' ? `<span class="txt">Mang chén về ${esc(pname(S.dishPoint))}</span>` : '<span class="txt">Chọn khu hoặc bàn</span>') +
     (F.tab === 'deliver' ? `<span class="cnt">${F.tables.length} / ${S.trays} khay</span>` : '<span class="cnt vi">Chọn 1</span>'));
-  const spots = F.tab === 'summon' && !rtm ? Object.keys(P).filter(k => ['station', 'dish'].includes(P[k].kind)).map(k =>
+  const spots = F.tab === 'summon' && !rtm ? Object.keys(P).filter(k => ['station', 'dish', 'entrance'].includes(P[k].kind)).map(k =>
     `<button class="tt spot" data-f="t:${k}" ${press(F.to === k)}><span class="lbl">Khu</span><b>${esc(P[k].name)}</b><span class="st">Gọi robot tới</span></button>`) : [];
   setHTML($('grid'), spots.concat(tableIds().map(t => {
     const i = sel.indexOf(t), [st, cls] = tableState(t);
