@@ -2,7 +2,7 @@
 // site's taught points (robot cm) and the robots themselves. Shared by station.html (view) and setup.html (place points).
 //   const vm = VMap(canvas, { onTap(x, y, hitId), fit });   // x,y in robot cm; hitId = point under the finger or null
 //   fit: true -> a ResizeObserver keeps the canvas pixels matched to its CSS box (window resize, alert strips, hidden -> shown)
-//   vm.setMap(map); vm.setZoom(1|2, centre?); vm.draw({ points, robots, charger });
+//   vm.setMap(map | null); vm.setZoom(1|2, centre?); vm.draw({ points, robots, charger });
 //   vm.toMap(clientX, clientY) -> {x, y};  vm.hit(clientX, clientY) -> id | null
 //   vm.resize()   // match the canvas pixels to its CSS box (× devicePixelRatio) and redraw; no-op while hidden
 // Drawing works in CSS px (canvas px / k); without resize() k = 1 and the canvas keeps its width/height attributes.
@@ -19,6 +19,7 @@ function VMap(canvas, opts = {}) {
   // Rasterize layers once per map at 1 canvas px per map pixel (5 cm): cheap to redraw, cheap to scale.
   function setMap(m) {
     map = m; segLabels = [];
+    if (!m) return;   // null: no map (another robot selected, or none received yet)
     const W = Math.ceil(m.size.x / m.pixelSize), H = Math.ceil(m.size.y / m.pixelSize);
     img = document.createElement('canvas'); img.width = W; img.height = H;
     const c = img.getContext('2d');

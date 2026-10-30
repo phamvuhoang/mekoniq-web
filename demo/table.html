@@ -50,18 +50,19 @@ function item(m, i, s) {
   let text, step, tone = '';
   const open = s.status === 'pending' || s.status === 'active';
   if (s.status === 'done') [text, step, tone] = ['Đã nhận · chúc ngon miệng', 4, 'ok'];
+  else if (s.status === 'manual') [text, step] = ['Nhân viên sẽ mang món tới bàn', 3];
   else if (!open) [text, step, tone] = [s.why === 'customer' ? 'Bạn đã huỷ món này' : 'Món đã được huỷ', 0, 'cancel'];
   else if (m.status === 'queued') [text, step] = ['Đang chờ robot', 1];
   else if (!m.loaded) [text, step] = [`${pname(m.stops[0].p)} đang chuẩn bị · robot ${m.robot} tới lấy`, 2];
   else if (m.cur === i && r.phase === 'atStop') [text, step, tone] = [`Robot ${m.robot} đã tới bàn — mời lấy món ở khay ${s.tray}`, 4, 'ok'];
-  else if (m.cur === i) [text, step] = [`Robot ${m.robot} đang tới · ${etaSec(r) ? `khoảng ${etaSec(r)} giây` : 'sắp tới'}`, 3];
+  else if (m.cur === i) [text, step] = [`Robot ${m.robot} đang tới bàn bạn`, 3];   // no live ETA: it would rebuild the cancel button every second
   else [text, step] = [`Robot ${m.robot} đang giao bàn khác trước, sau đó tới bàn bạn`, 3];
   if (open && r && r.halt) text += ' (robot đang tạm dừng)';
   const k = `c-${m.id}-${i}`;
   return `<div class="card item">
     <div class="row"><b>${what} #${m.id}${s.tray ? ' · khay ' + s.tray : ''}</b><span class="small muted">${clock(m.createdAt)}</span></div>
     <div class="what">${esc(m.note || what)}</div>
-    ${open || s.status === 'done' ? `<div class="steps">${[1, 2, 3, 4].map(n => `<i class="${n <= step ? 'on' : ''}"></i>`).join('')}</div>` : ''}
+    ${step ? `<div class="steps">${[1, 2, 3, 4].map(n => `<i class="${n <= step ? 'on' : ''}"></i>`).join('')}</div>` : ''}
     <div class="status ${tone}">${esc(text)}</div>
     ${open ? `<button class="act warn${isArmed(k) ? ' armed' : ''}" data-m="${m.id}" data-s="${i}"><b>${isArmed(k) ? 'Chạm lần nữa để huỷ món' : 'Huỷ món này'}</b></button>` : ''}
   </div>`;

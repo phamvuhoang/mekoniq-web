@@ -35,7 +35,7 @@
   .queue li small.warn { color: var(--warn-ink); } .queue li small.danger { color: var(--danger); } .queue li small.go { color: var(--green); }
   .queue li > :is(button, .lock) { grid-row: 1 / span 2; grid-column: 2; }
   .queue li .pill { padding: 0 6px; font-size: 11px; vertical-align: 2px; margin-right: 4px; }
-  .queue .x { min-width: 40px; height: 40px; padding: 0 8px; border: 1.5px solid color-mix(in srgb, var(--danger) 30%, var(--card)); border-radius: 12px; background: var(--card); color: var(--danger); font-weight: 900; }
+  .queue .x { min-width: 40px; height: 40px; padding: 0 8px; border: 1.5px solid var(--pill-danger); border-radius: 12px; background: var(--card); color: var(--danger); font-weight: 900; }
   .queue .x.armed { background: var(--danger); border-color: var(--danger); color: var(--card); animation: pulse 1s infinite; }
   .queue .lock { font-size: 18px; }
   .queue .empty { padding: 20px 0; }
@@ -75,7 +75,7 @@
   .urg { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1.5px solid var(--line); border-radius: 14px; line-height: 1.2; cursor: pointer; }
   .urg input { width: 22px; height: 22px; flex: none; accent-color: var(--warn); }
   .urg b { display: block; font-weight: 900; } .urg small { font-size: 12px; color: var(--gray); font-weight: 700; }
-  .urg:has(input:checked) { border-color: var(--accent); background: var(--pill-warn); }
+  .urg.on { border-color: var(--accent); background: var(--pill-warn); }
   #pvSend { flex: none; margin-top: auto; display: grid; gap: 8px; }
   #pvSend .send { --act-h: 104px; }
   #pvSend .act.outline { --act-h: 52px; }
@@ -169,7 +169,7 @@
 
   /* Fleet */
   .robot { border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
-  .robot.halt { border: 2px solid var(--accent); background: color-mix(in srgb, var(--pill-warn) 35%, var(--card)); }
+  .robot.halt { border: 2px solid var(--accent); }
   .robot .rid { display: inline-flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 900; color: var(--deep); }
   .robot .rid i { width: 12px; height: 12px; border-radius: 50%; }
   .bat { height: 6px; background: var(--soft); border-radius: 3px; overflow: hidden; margin: 8px 0; }
@@ -291,12 +291,14 @@ function openSetup() {
     me = { role: pick, name: $('sname').value.trim() };
     saveMe();
     $('setup').close(); applyRole();
+    if (first && pick === 'ql') setView('mon');   // same default as on load
   };
   $('setup').showModal();
 }
+const drawRoles = () => setHTML($('roleSeg'), App.site.roles.map(r => `<button data-role="${esc(r.id)}" ${press(r.id === role().id)}>${esc(r.name)}</button>`).join('') +
+  `<button class="more" data-more title="Tên máy: ${esc(by())}" aria-label="Đổi tên máy">…</button>`);
 function applyRole() {
-  setHTML($('roleSeg'), App.site.roles.map(r => `<button data-role="${esc(r.id)}" ${press(r.id === role().id)}>${esc(r.name)}</button>`).join('') +
-    `<button class="more" data-more title="Tên máy: ${esc(by())}" aria-label="Đổi tên máy">…</button>`);
+  drawRoles();
   F.tab = role().tab;
   F.from = role().home && App.site.points[role().home].kind === 'station' ? role().home : 'kitchen';
   choose();
@@ -305,15 +307,16 @@ $('roleSeg').onclick = e => {
   if (e.target.closest('[data-more]')) return openSetup();
   const b = e.target.closest('[data-role]');
   if (!b) return;
+  const was = role().id;
   me = { role: b.dataset.role, name: (me && me.name) || '' };
   saveMe(); applyRole();
+  if (me.role === 'ql' && was !== 'ql') setView('mon');   // just switched to the manager: same default as on load
 };
-// Sound unlock: app bar (landscape) or the setup dialog (portrait hides the app bar button).
-document.addEventListener('click', e => {
-  if (!e.target.closest('.snd')) return;
+// Sound unlock: browsers need one tap first, so any tap does it (portrait hides the app bar button). One-way, runs once.
+document.addEventListener('click', () => {
   enableSound();
   for (const b of document.querySelectorAll('.snd')) { b.textContent = 'Âm thanh bật'; b.disabled = true; }
-});
+}, { once: true });
 function setView(v) {
   for (const x of $('views').children) x.setAttribute('aria-pressed', x.dataset.view === v);
   $('desk').hidden = $('foot').hidden = v !== 'desk';
@@ -328,6 +331,8 @@ setView(['desk', 'mon'].includes(qs.get('view')) ? qs.get('view') : me && me.rol
 // ---- Desk: pick robot + task + tables, check the order preview, one big send button ----
 const F = { tab: 'deliver', from: 'kitchen', tables: [], table: null, to: null, robot: 'any', urgent: false, chips: [], free: '' };
 const NOTES = ['Không hành', 'Ít cay', 'Món nóng', 'Thêm chén'];   // ponytail: fixed list; phase 2 moves it to site.notes
+// Send / Bỏ chọn turn the card into recall mode with its big button at the same spot: ignore that button for 1 s after.
+let sentAt = 0;
 const tableIds = () => Object.keys(App.site.points).filter(k => App.site.points[k].kind === 'table');
 const press = (cond) => `aria-pressed="${!!cond}"`;
 const TASKS = { deliver: ['Giao món', 'Deliver'], bus: ['Thu dọn bàn', 'Bus table'], summon: ['Gọi robot tới', 'Summon'] };
@@ -345,29 +350,27 @@ function receiveBtn(m, cls) {
   const s = backStop(m), t = '✓ ' + (s.a === 'return' ? 'Đã nhận lại đồ' : 'Đã dỡ chén đĩa');
   return `<button class="${cls}" data-act="receive" data-m="${m.id}">${cls.includes('act') ? L(t, `${m.robot} tại ${esc(pname(s.p))} · bấm để cho robot về`) : t}</button>`;
 }
-// A specific robot whose job is locked (food coming back / dirty dishes on board): shown with an explanation, no button.
-const lockedOf = id => id !== 'any' && App.state.missions.find(m => m.robot === id && locked(m) && !arrived(m));
 const lockWhy = m => backStop(m) ? 'Đang mang đồ về — chờ nhận lại' : 'Đang chở chén bẩn — không huỷ';
-function cancelTarget() {
-  const ms = App.state.missions.filter(m => !locked(m) || arrived(m));
-  if (F.robot !== 'any') return ms.find(m => m.robot === F.robot);
-  return ms.filter(m => m.by === by()).sort((a, b) => b.createdAt - a.createdAt)[0];
-}
+// Picked first, classified after: a locked newest job shows its explanation, never an older job's recall button.
+const cancelTarget = () => F.robot !== 'any' ? App.state.missions.find(m => m.robot === F.robot)
+  : App.state.missions.filter(m => m.by === by()).sort((a, b) => b.createdAt - a.createdAt)[0];
 
 // Note chips + free text + urgent: holds a text input, so it only re-renders on a choice, not on every state tick.
 function renderTask() {
   $('pvOpts').innerHTML = (F.tab === 'deliver' ? `<p class="eyebrow sm">Ghi chú nhanh</p>
     <div class="notes">${NOTES.map((n, i) => `<button class="chip" data-f="chip:${i}" ${press(F.chips.includes(n))}>${esc(n)}</button>`).join('')}</div>
     <input type="text" id="note" maxlength="80" placeholder="Khác…" value="${esc(F.free)}">` : '') +
-    `<label class="urg"><input type="checkbox" id="urgent" ${F.urgent ? 'checked' : ''}><span><b>Ưu tiên gấp</b><small>lên đầu hàng chờ</small></span></label>`;
+    `<label class="urg ${F.urgent ? 'on' : ''}"><input type="checkbox" id="urgent" ${F.urgent ? 'checked' : ''}><span><b>Ưu tiên gấp</b><small>lên đầu hàng chờ</small></span></label>`;
 }
 function renderDesk() {
   if (!App.state) return;
   const S = App.site, P = S.points, R = App.state.robots;
   const free = R.filter(r => robotStatus(r)[1] === 'ok').length;
-  const rcard = (id, dot, name, bat, sub) => `<button class="rbtn" data-f="robot:${id}" ${press(F.robot === id)}><i style="background:${dot}"></i><b>${name}</b><span class="bt">${bat}</span><small>${esc(sub)}</small></button>`;
-  setHTML($('robots'), rcard('any', TONE.go, 'Bất kỳ · gần nhất', '', `${free}/${R.length} sẵn sàng`) +
-    R.map(r => { const [t, c] = robotStatus(r); return rcard(r.id, TONE[c], r.id, Math.round(r.battery) + '%', t); }).join(''));
+  const rcard = (id, dot, name, sub) => `<button class="rbtn" data-f="robot:${id}" ${press(F.robot === id)}><i style="background:${dot}"></i><b>${name}</b><span class="bt"></span><small>${esc(sub)}</small></button>`;
+  setHTML($('robots'), rcard('any', TONE.go, 'Bất kỳ · gần nhất', `${free}/${R.length} sẵn sàng`) +
+    R.map(r => { const [t, c] = robotStatus(r); return rcard(r.id, TONE[c], r.id, t); }).join(''));
+  // Battery % ticks every few seconds while driving: filled in after setHTML so the cards are not re-created (like live()).
+  for (const r of R) { const el = $('robots').querySelector(`[data-f="robot:${r.id}"] .bt`); if (el) el.textContent = Math.round(r.battery) + '%'; }
 
   const ms = sortMissions();
   $('qhead').textContent = `Hàng chờ · ${ms.length}`;
@@ -403,12 +406,12 @@ function renderDesk() {
     const n = F.tables.length, go = { deliver: [`Gọi robot · giao ${n} bàn`, `Call robot · deliver ${n} table${n > 1 ? 's' : ''}`], bus: ['Gọi robot thu dọn', 'Call robot to bus'], summon: ['Gọi robot tới', 'Summon robot'] }[F.tab];
     setHTML($('pvSend'), `<button class="act primary send" data-act="create">${L(...go)}</button><button class="act outline" data-act="unpick">${L('Bỏ chọn', 'Clear selection')}</button>`);
   } else {
-    const tgt = cancelTarget(), lk = !tgt && lockedOf(F.robot), shown = tgt || lk, k = tgt && 'cm-' + tgt.id, [t, c] = shown ? missionStatus(shown) : [];
-    setHTML($('pvHead'), `<p class="eyebrow sm">Lệnh gần nhất của trạm này</p>` + (shown
-      ? `<h2>${esc(shown.label)}</h2><p class="rl">Robot: ${shown.robot || '—'}<span class="pill ${c}">${esc(t)}</span></p>`
-      : '<h2 class="muted">Không có lệnh để thu hồi</h2>') + (lk ? `<p class="rl">${lockWhy(lk)}</p>` : '') + '<p class="rl small">Chọn trên lưới để tạo lệnh mới.</p>');
-    // cancelTarget() skips locked missions, so a target here is arrived or cancellable; a locked one (lk) gets text only (spec 4.2).
-    setHTML($('pvSend'), !tgt ? '' : arrived(tgt) ? receiveBtn(tgt, 'act primary send')
+    const tgt = cancelTarget(), lk = tgt && locked(tgt) && !arrived(tgt), k = tgt && 'cm-' + tgt.id, [t, c] = tgt ? missionStatus(tgt) : [];
+    setHTML($('pvHead'), `<p class="eyebrow sm">Lệnh gần nhất của trạm này</p>` + (tgt
+      ? `<h2>${esc(tgt.label)}</h2><p class="rl">Robot: ${tgt.robot || '—'}<span class="pill ${c}">${esc(t)}</span></p>`
+      : '<h2 class="muted">Không có lệnh để thu hồi</h2>') + (lk ? `<p class="rl">${lockWhy(tgt)}</p>` : '') + '<p class="rl small">Chọn trên lưới để tạo lệnh mới.</p>');
+    // Arrived -> receive; locked (food coming back / dirty dishes on board) -> text only, no button (spec 4.2).
+    setHTML($('pvSend'), !tgt || lk ? '' : arrived(tgt) ? receiveBtn(tgt, 'act primary send')
       : `<button class="act danger send ${isArmed(k) ? 'armed' : ''}" data-act="cancel" data-m="${tgt.id}">${isArmed(k) ? L('Chạm lần nữa để thu hồi', 'Tap again to confirm') : L('Thu hồi robot', 'Recall')}</button>`);
   }
 
@@ -433,19 +436,20 @@ $('desk').addEventListener('click', e => {
   const f = e.target.closest('[data-f]');
   if (f) { const [k, v] = f.dataset.f.split(':'); return choose(k, v); }
   const act = e.target.closest('[data-act]');
-  if (act && act.dataset.act === 'unpick') { Object.assign(F, { tables: [], table: null, to: null }); return choose(); }
+  if (act && act.dataset.act === 'unpick') { Object.assign(F, { tables: [], table: null, to: null }); sentAt = Date.now(); return choose(); }
   if (!act || act.dataset.act !== 'create') return;
   const base = { type: 'create', robot: F.robot, urgent: F.urgent, by: by() };
-  if (F.tab === 'deliver') send({ ...base, kind: 'deliver', from: F.from, tables: F.tables, note: [...F.chips, F.free].filter(Boolean).join(', ') });
+  if (F.tab === 'deliver') send({ ...base, kind: 'deliver', from: F.from, tables: F.tables, note: [...F.chips, F.free.trim()].filter(Boolean).join(', ') });
   if (F.tab === 'bus') send({ ...base, kind: 'bus', table: F.table });
   if (F.tab === 'summon') send({ ...base, kind: 'summon', to: F.to });
   toast('Đã gửi lệnh');
   Object.assign(F, { tables: [], table: null, to: null, urgent: false, chips: [], free: '' });
+  sentAt = Date.now();
   choose();
 });
 $('desk').addEventListener('input', e => {
   if (e.target.id === 'note') F.free = e.target.value;
-  if (e.target.id === 'urgent') { F.urgent = e.target.checked; renderDesk(); }
+  if (e.target.id === 'urgent') { F.urgent = e.target.checked; e.target.parentNode.classList.toggle('on', F.urgent); renderDesk(); }
 });
 
 // ---- Map ----
@@ -467,8 +471,8 @@ function buildMap() {
   $('map').innerHTML = floorSVG(true) + `<g id="net"></g><g id="paths"></g><g id="obs"></g>` +
     S.robots.map(r => `<g class="rb" id="rb-${r.id}"><circle r=".5" fill="${TONE.ok}"/><circle class="ring" r=".72" hidden/><text>${r.id}</text></g>`).join('');
   // One legend row: lane styles + robot tones.
-  $('legend').innerHTML = `<div class="legend">${[['', 'Lối đi'], ['narrow', 'Lối hẹp'], ['slow', 'Đi chậm']].map(laneKey).join('')}` +
-    [['ok', 'Rảnh'], ['go', 'Đang chạy'], ['warn', 'Đang chờ'], ['danger', 'Cần xử lý']].map(([t, l]) => `<span><i style="background:${TONE[t]}"></i>${l}</span>`).join('') + '</div>';
+  setHTML($('legend'), `<div class="legend">${[['', 'Lối đi'], ['narrow', 'Lối hẹp'], ['slow', 'Đi chậm']].map(laneKey).join('')}` +
+    [['ok', 'Rảnh'], ['go', 'Đang chạy'], ['warn', 'Đang chờ'], ['danger', 'Cần xử lý']].map(([t, l]) => `<span><i style="background:${TONE[t]}"></i>${l}</span>`).join('') + '</div>');
   renderMode();
   $('map').onclick = e => {   // onclick, not addEventListener: buildMap runs again after each config save
     if (MODE !== 'pick') {
@@ -487,23 +491,27 @@ function buildMap() {
   mapBuilt = true; netV = -1;
 }
 // Valetudo-only site: the robot's own map (vmap.js) instead of the hand-drawn floor plan; tapping a table picks it.
-let vm = null, vmapT = 0, vmapRobot = null;
+let vm = null, vmapT = 0, vmapKey = '', vmapPoll = 0;
+const firstVmapRobot = () => App.site && App.site.robots.find(x => x.driver === 'valetudo');
+const vkey = r => r ? r.id + '|' + r.valetudo.topic : '';
 async function pollVmap() {
-  const r = App.site && App.site.robots.find(x => x.driver === 'valetudo');
+  const r = firstVmapRobot(), key = vkey(r), poll = ++vmapPoll;
   if (!r) return;
   try {
     const res = await fetch('/api/map/' + encodeURIComponent(r.id), { cache: 'no-store' });
-    if (!res.ok) return;
-    const m = await res.json();
-    if (m.t !== vmapT) { vmapT = m.t; vmapRobot = r.id; vm.setMap(m); renderMap(); }
+    const m = res.ok ? await res.json() : null;
+    if (poll !== vmapPoll || vkey(firstVmapRobot()) !== key) return;
+    if (!m || m.topic !== r.valetudo.topic) { vmapT = 0; vm.setMap(null); renderMap(); return; }
+    if (m.t !== vmapT) { vmapT = m.t; vm.setMap(m); renderMap(); }
   } catch (e) {}
 }
 function renderVmap() {
   const S = App.site;
-  $('map').style.display = 'none'; $('vmap').hidden = false;
   setHTML($('legend'), '<p class="vhint">Bản đồ do robot tự quét. Chạm bàn để chọn cho nhiệm vụ; điểm dừng chỉnh trong “Cấu hình”.</p>');
-  if (!vm) { vm = VMap($('vmap'), { fit: true, onTap: (x, y, id) => { if (id && S.points[id] && S.points[id].kind === 'table') choose('t', id); } }); pollVmap(); setInterval(pollVmap, 10000); }
-  const r = S.robots.find(x => x.driver === 'valetudo'), P = (r && r.valetudo.points) || {};
+  if (!vm) { vm = VMap($('vmap'), { fit: true, onTap: (x, y, id) => { if (id && App.site.points[id] && App.site.points[id].kind === 'table') choose('t', id); } }); pollVmap(); setInterval(pollVmap, 10000); }
+  const r = firstVmapRobot();
+  if (vmapKey !== vkey(r)) { vmapKey = vkey(r); vmapT = 0; vm.setMap(null); pollVmap(); }
+  const P = (r && r.valetudo.points) || {};
   const sel = new Set(F.tab === 'deliver' ? F.tables : F.tab === 'bus' ? [F.table] : [F.to]);
   const points = {};
   for (const [id, p] of Object.entries(S.points)) if (P[id]) points[id] = { ...P[id], name: p.name, kind: p.kind, sel: sel.has(id) };
@@ -512,8 +520,9 @@ function renderVmap() {
   vm.draw({ points, robots });
 }
 function renderMap() {
-  if (!App.site) return;
+  if (!App.site || $('mon').hidden) return;   // drawn only while the monitor shows; setView re-renders on the switch
   $('tools').hidden = $('routeLnk').hidden = !hasSim();
+  $('map').toggleAttribute('hidden', !hasSim()); $('vmap').hidden = hasSim();   // both ways: the site may switch after a config save
   if (!hasSim()) return renderVmap();
   if (!mapBuilt) buildMap();
   if (App.map && App.map.v !== netV) { netV = App.map.v; $('net').innerHTML = netSVG(App.map); }
@@ -624,7 +633,7 @@ function simHTML() {
     <button class="btn reset ${isArmed('reset') ? 'armed' : ''}" data-act="reset">${isArmed('reset') ? 'Xoá hết dữ liệu demo?' : '↺ Khởi động lại demo'}</button>`;
 }
 function renderPanel() {
-  if (!App.state) return;
+  if (!App.state || $('mon').hidden) return;
   if (PTAB === 'sim' && !hasSim()) PTAB = 'fleet';
   const ms = sortMissions();
   setHTML($('ptabs'), Object.entries(PTABS).filter(([k]) => k !== 'sim' || hasSim()).map(([k, t]) =>
@@ -656,7 +665,7 @@ function render() {
 
 document.body.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
-  if (!b || b.dataset.act === 'create') return;
+  if (!b || b.dataset.act === 'create' || (b.closest('#pvSend') && Date.now() - sentAt < 1000)) return;
   const a = b.dataset.act, m = +b.dataset.m, r = b.dataset.r;
   if (a === 'receive') { const x = App.state.missions.find(y => y.id === m); if (x && arrived(x)) send({ type: 'confirm', robot: x.robot, mission: x.id, stop: x.cur, by: by() }); }
   if (a === 'cancel') armed('cm-' + m, () => send({ type: 'cancel', mission: m, by: by() }), render);
@@ -677,7 +686,7 @@ let first = true;
 connect(m => {
   if (m.type === 'site') {
     mapBuilt = false;   // robots / tables may have changed: rebuild the floor plan on the next render
-    if (first) { first = false; if (!me) openSetup(); applyRole(); }
+    if (first) { first = false; if (!me) openSetup(); applyRole(); } else drawRoles();   // roles may be renamed / added
     return;
   }
   if (m.type === 'state' || m.type === 'map') render();

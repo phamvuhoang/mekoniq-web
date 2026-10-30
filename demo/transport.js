@@ -24,14 +24,16 @@ const Transport = (() => {
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
     // seed = this deploy's site.json (siteReset target); custom = what setup.html saved, like global.site || seed on Node-RED.
-    // Only custom is stored, tagged with its seed's fingerprint: a new deploy's site.json is never pinned by an old visit.
+    // Everything saved is tagged with its seed's fingerprint: a new deploy's site.json (tables, route map) is never pinned by
+    // an old visit. custom carries its own map, so it goes with the old seed too. A blob of the wrong shape would crash the
+    // orchestrator on every message (reset included), so it is dropped as well.
     const fp = [...JSON.stringify(seed)].reduce((h, ch) => Math.imul(h, 31) + ch.charCodeAt(0) | 0, 0);
-    let custom = saved && saved.custom && saved.seedFp === fp ? saved.custom : null;
-    if (saved && saved.custom && !custom) saved = null;   // config made for an older site.json: start the demo fresh
+    if (!saved || saved.seedFp !== fp || !saved.st || !saved.st.robots || !Array.isArray(saved.st.missions) || !saved.sim || !saved.sim.robots) saved = null;
+    let custom = (saved && saved.custom) || null;
     let site = custom || seed;
     const st = (saved && saved.st) || O.init(site, Date.now());
     const sim = (saved && saved.sim) || S.init(site);
-    const save = () => { try { localStorage.setItem(KEY, JSON.stringify(custom ? { st, sim, custom, seedFp: fp } : { st, sim })); } catch (e) {} };
+    const save = () => { try { localStorage.setItem(KEY, JSON.stringify(custom ? { st, sim, custom, seedFp: fp } : { st, sim, seedFp: fp })); } catch (e) {} };
 
     const deliver = ui => {
       for (const u of ui) {

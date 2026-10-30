@@ -32,7 +32,8 @@ function normalize(input, seed) {
   site.rev = Number(site.rev) || 0;
   num(site, 'trays', 1, 8, 'site'); if (site.trays === undefined) site.trays = seed.trays;
   site.timing = site.timing && typeof site.timing === 'object' ? site.timing : { ...seed.timing };
-  for (const k of TIMING) { num(site.timing, k, 0, 3600, 'timing'); if (site.timing[k] === undefined) site.timing[k] = seed.timing[k]; }
+  for (const k of TIMING) { num(site.timing, k, 0, k.endsWith('Battery') ? 100 : 3600, 'timing'); if (site.timing[k] === undefined) site.timing[k] = seed.timing[k]; }
+  if (site.timing.lowBattery >= site.timing.chargedBattery) errors.push(`timing: Pin yếu (${site.timing.lowBattery} %) phải thấp hơn Pin đủ (${site.timing.chargedBattery} %)`);
 
   // points
   site.points = site.points && typeof site.points === 'object' ? site.points : {};
