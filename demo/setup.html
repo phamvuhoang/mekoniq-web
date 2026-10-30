@@ -6,7 +6,11 @@
 <style>
   /* Manager's config page (spec 4.5): every operational setting, saved live to the orchestrator (no site.json editing).
      Tabs in the app bar; each tab fits one screen, long lists scroll inside their card. */
-  .appbar .title { flex: none; }
+  /* Lưu must stay on screen (.screen clips): the title, which carries the restaurant name, is cut short (…) first;
+     if that is still too wide the buttons wrap to a second row. Wide screens look as before (title up to its own width). */
+  .appbar { height: auto; min-height: 64px; flex-wrap: wrap; row-gap: 8px; padding-block: 8px; }
+  .appbar .title { flex: 1 1 0; min-width: 120px; max-width: max-content; }
+  .appbar .title b, .appbar .title small { overflow: hidden; text-overflow: ellipsis; }
   .appbar .seg.dark button { padding: 8px 14px; }
   .appbar .btn { min-height: 40px; padding: 8px 14px; border-color: #3c5f5c; color: var(--card); }
   .appbar .btn.primary { border-color: var(--mint); color: var(--deep); }
@@ -88,10 +92,35 @@
   .trow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
   .trow:first-of-type { border-top: 0; }
   .trow b { display: block; font-size: 15px; }
+  .nrow { display: flex; gap: 8px; padding: 4px 0; }
+  .nrow input, .nrow select { flex: 1; min-width: 0; }
   .trow small { display: block; color: var(--muted); font-size: 12px; }
 
   /* Sao lưu: one centred card */
   #tab-backup { place-content: center; }
+
+  /* Tính năng (#features wraps the tab): feature choices | menu + bank. Each card scrolls inside. */
+  #tab-features { grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+  #features { display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; min-height: 0; }
+  #features > * { max-height: 100%; min-height: 0; }
+  #features .card { overflow: auto; }
+  #payCard { flex: none; }
+  .mtab { width: 100%; border-collapse: collapse; }
+  .mtab td { padding: 3px 4px; } .mtab td:last-child { width: 1%; }
+  .mtab input, .mtab select { width: 100%; min-width: 0; }
+  .mtab input.id { font-family: var(--mono); max-width: 110px; } .mtab input[type=number] { max-width: 110px; }
+  .feat { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+  #payment label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  #payment img { max-width: 160px; border-radius: 12px; border: 1px solid var(--line); }
+  .feat:first-of-type { border-top: 0; } .feat > div:first-child { flex: 1; min-width: 0; } .feat small { display: block; color: var(--muted); font-size: 12px; }
+  .grp { margin: 14px 0 0; text-transform: uppercase; letter-spacing: .08em; }
+  .why { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--warn-ink); }
+  .why:empty { display: none; }
+  #featNote { display: grid; gap: 8px; margin-bottom: 8px; }
+  #featNote:empty { display: none; }
+  #featNote .strip { border-radius: 12px; padding: 8px 12px; }
+  #featNote ul { margin: 4px 0 0; padding-left: 18px; font-weight: 500; }
+  #sysFeatures { display: grid; gap: 6px; margin-bottom: 12px; }
   .backup { width: min(640px, 100%); display: grid; gap: 14px; padding: 24px; }
   .backup h2 { margin: 0; font-size: 26px; font-weight: 900; }
   .backup p { margin: 0; }
@@ -138,6 +167,10 @@
     #tab-robots { grid-template: none / repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); overflow: auto; }
     #robots, #robots.many { display: contents; }
     #tab-roles { grid-template-columns: minmax(0, 1fr); }
+    #tab-features { display: block; }   /* the tab scrolls; rows take their content height */
+    #features { grid-template: none / minmax(0, 1fr); }
+    #features > * { max-height: none; }
+    #menuCard { max-height: 50vh; }
     #tab-system { grid-template-columns: minmax(0, 1fr); }
   }
   :root[data-orient=portrait] .appbar { height: auto; flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
@@ -147,6 +180,10 @@
   :root[data-orient=portrait] #tab-robots { grid-template: none / repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); overflow: auto; }
   :root[data-orient=portrait] #robots, :root[data-orient=portrait] #robots.many { display: contents; }
   :root[data-orient=portrait] #tab-roles { grid-template-columns: minmax(0, 1fr); }
+  :root[data-orient=portrait] #tab-features { display: block; }
+  :root[data-orient=portrait] #features { grid-template: none / minmax(0, 1fr); }
+  :root[data-orient=portrait] #features > * { max-height: none; }
+  :root[data-orient=portrait] #menuCard { max-height: 50vh; }
   :root[data-orient=portrait] #tab-system { grid-template-columns: minmax(0, 1fr); }
 </style>
 </head><body>
@@ -173,7 +210,7 @@
         </div>
       </div>
       <div class="card col"><p class="eyebrow sm" id="ptCount">Điểm dừng</p><div class="list" id="points"></div>
-        <div class="foot"><button class="btn primary" id="addTable">+ Thêm bàn</button><button class="btn" id="addStation">+ Thêm trạm</button></div></div>
+        <div class="foot"><button class="btn primary" id="addTable">+ Thêm bàn</button><button class="btn" id="addStation">+ Thêm trạm</button><button class="btn" id="addEntrance">+ Thêm cửa</button></div></div>
     </section>
     <section id="tab-robots" class="tab" hidden>
       <div id="robots"></div>
@@ -184,8 +221,16 @@
     </section>
     <section id="tab-roles" class="tab" hidden>
       <div class="card col"><p class="eyebrow sm">Vai trò · màn hình trạm</p><div class="col" id="roles"></div></div>
-      <div class="card"><p class="eyebrow sm">Thời gian & khay</p><div id="timing"></div></div>
+      <div class="col"><div class="card"><p class="eyebrow sm">Thời gian & khay</p><div id="timing"></div></div>
+        <div class="card"><p class="eyebrow sm">Ghi chú nhanh · chip trên máy trạm</p>
+          <p class="small muted sysnote">Chip chỉ là phím tắt để nhân viên nhập nhanh ghi chú cho chuyến giao, không phải chỉ dẫn đã được bếp tiếp nhận. Xoá hết để ẩn chip; nhân viên vẫn gõ được ghi chú tự do.</p><div id="notes"></div></div></div>
     </section>
+    <section id="tab-features" class="tab" hidden><div id="features">
+      <div class="card"><p class="eyebrow sm">Tính năng · theo cách nhà hàng phục vụ</p><div id="policy"></div></div>
+      <div class="col"><div class="card" id="menuCard"><p class="eyebrow sm">Thực đơn · gọi món trên robot</p><div id="menu"></div></div>
+        <div class="card col" id="payCard"><p class="eyebrow sm">Thanh toán · chuyển khoản VietQR</p><div class="col" id="payment"></div>
+          <label class="btn sm">Tải ảnh QR tĩnh (khi không có Internet)<input type="file" id="qrUpload" accept="image/png,image/jpeg,image/webp" hidden></label></div></div>
+    </div></section>
     <section id="tab-backup" class="tab" hidden><div class="card backup">
       <p class="eyebrow sm" style="margin:0">Sao lưu</p>
       <h2 id="info"></h2>
@@ -198,6 +243,7 @@
       <div class="strip" id="sysOffline" hidden><span class="kind">Hệ thống</span><span class="grow">Chỉ có khi chạy trên máy nhà hàng — bản web demo không có máy chủ, chỉ kiểm tra được cấu hình.</span></div>
       <div class="col">
         <div class="card"><p class="eyebrow sm">Kiểm tra</p><div class="checks" id="sysChecks"></div></div>
+        <div class="card"><p class="eyebrow sm">Tính năng đang sử dụng</p><div id="sysFeatures"></div><button class="btn sm" id="manageFeatures">Quản lý tính năng</button></div>
         <div class="card" id="sysMqtt" hidden><p class="eyebrow sm">Điền vào Valetudo · Connectivity → MQTT</p><pre class="mqtt" id="mqttCfg"></pre>
           <p class="small sysnote">Password: xem <code>cat ~/robot/.mqtt-pass</code> trên điện thoại</p><button class="btn sm" id="copyMqtt">Chép</button></div>
       </div>
@@ -210,6 +256,7 @@
 </div>
 <div id="offline" hidden>Mất kết nối tới hệ thống điều phối — đang kết nối lại…</div>
 
+<script src="lib/feature-policy.js"></script>
 <script>window.module = { exports: {} };</script><script src="lib/site.js"></script><script>const SiteLib = module.exports;</script>
 <script src="transport.js"></script><script src="common.js"></script><script src="vmap.js"></script>
 <script>
@@ -217,7 +264,7 @@ const $ = id => document.getElementById(id);
 let BY = 'Quản lý ca';
 try { const s = JSON.parse(localStorage.getItem('mekoniq.station')); if (s && s.name) BY = s.name; } catch (e) {}
 const clone = o => JSON.parse(JSON.stringify(o));
-const KIND_VI = { table: 'Bàn', station: 'Trạm', dish: 'Rửa', dock: 'Sạc' };
+const KIND_VI = { table: 'Bàn', station: 'Trạm', dish: 'Rửa', dock: 'Sạc', entrance: 'Cửa' };
 const HINT = {
   arriveCm: 'Dừng cách điểm ≤ bấy nhiêu cm thì coi là đã tới', nomoveSec: 'Sau lệnh mà chừng ấy giây robot chưa chạy → xét theo vị trí (rời dock chậm: tăng lên 20–30)',
   tripSec: 'Một chuyến chạy quá chừng ấy giây → bị chặn (lưới cuối)', retrySec: 'Bị chắn: thử đi tiếp sau bấy nhiêu giây', retryMax: 'Thử bấy nhiêu lần rồi mới báo trạm',
@@ -228,7 +275,8 @@ const HINT = {
 let D = null, dirty = false, saving = false, tab = new URLSearchParams(location.search).get('tab') || 'points', sel = null, robotId = null;
 let pendingSave = null, sentDraft = '';
 let stale = false, err = '';   // strips under the app bar: another station saved / last save or import failed
-const TABS = { points: 'Điểm & bản đồ', robots: 'Robot', roles: 'Vai trò & thời gian', backup: 'Sao lưu', system: 'Hệ thống' };
+const TABS = { points: 'Điểm & bản đồ', robots: 'Robot', roles: 'Vai trò & thời gian', features: 'Tính năng', backup: 'Sao lưu', system: 'Hệ thống' };
+if (tab === 'guest') tab = 'features';   // old links: the tab was "Khách hàng"
 if (!TABS[tab]) tab = 'points';
 const valRobots = () => D.robots.filter(r => r.driver === 'valetudo');
 const curRobot = () => valRobots().find(r => r.id === robotId) || valRobots()[0] || null;
@@ -238,10 +286,11 @@ $('bar').outerHTML = APPBAR({ title: 'Cấu hình', sub: 'Setup', home: 'station
   right: '<span class="pill" id="rev">…</span><button class="btn" id="revert" disabled>Huỷ thay đổi</button><button class="btn primary" id="save" disabled>Đã lưu</button>' });
 startClock();
 
+// A site migrated from the old format (App.migrated) can be saved unchanged: that writes it as version 2.
 function setDirty(v) {
   dirty = v;
-  $('save').disabled = !dirty || saving; $('revert').disabled = !dirty || saving;
-  $('save').textContent = saving ? 'Đang lưu…' : dirty ? 'Lưu' : 'Đã lưu';
+  $('save').disabled = !(dirty || App.migrated) || saving; $('revert').disabled = !dirty || saving;
+  $('save').textContent = saving ? 'Đang lưu…' : dirty || App.migrated ? 'Lưu' : 'Đã lưu';
 }
 // 'ok' -> toast; 'err' -> red strip until the next save / dismiss; '' clears.
 function msg(text, cls) { err = cls === 'err' ? text : ''; if (cls === 'ok') toast(text, 'ok'); strips(); }
@@ -260,6 +309,7 @@ function render() {
   if (tab === 'points') renderPoints();
   if (tab === 'robots') renderRobots();
   if (tab === 'roles') renderRoles();
+  if (tab === 'features') renderFeatures();
   if (tab === 'backup') renderBackup();
   healthPolling(tab === 'system');
   if (tab === 'system') renderSystem();
@@ -275,7 +325,7 @@ document.addEventListener('click', e => {
 
 // ---- Points ----
 function renderPoints() {
-  const order = ['station', 'dish', 'dock', 'table'];
+  const order = ['station', 'entrance', 'dish', 'dock', 'table'];
   const R = valRobots(), r = curRobot();
   $('robotPick').innerHTML = R.length > 1 ? R.map(x => `<button data-robot="${esc(x.id)}" aria-pressed="${r && r.id === x.id}">${esc(x.id)}</button>`).join('') : '';
   $('mapTitle').textContent = r ? `Bản đồ robot ${r.id} · chạm để đặt điểm đang chọn` : 'Bản đồ robot · chỉ có với robot thật (Valetudo)';
@@ -305,17 +355,20 @@ $('delPoint').onclick = () => {
   const id = sel; if (!id || !D.points[id] || keep(id)) return;
   armed('del-' + id, () => {
     delete D.points[id]; for (const r of valRobots()) delete r.valetudo.points[id]; for (const r of D.roles) if (r.home === id) r.home = null;
+    if ((D.service || {}).requestStation === id) D.service.requestStation = null;
     if (sel === id) sel = null; setDirty(true); render();
   }, render);
 };
 $('robotPick').onclick = e => { const b = e.target.closest('[data-robot]'); if (b) { robotId = b.dataset.robot; renderPoints(); pollMap(); } };
 $('addTable').onclick = () => { const t = SiteLib.nextTable(D); D.points[t.id] = { name: t.name, kind: 'table' }; sel = t.id; setDirty(true); render(); };
-$('addStation').onclick = () => {
-  const id = prompt('Mã trạm (chữ/số, ví dụ bar2):'); if (!id) return;
+const addPoint = (kind, what, eg) => () => {
+  const id = prompt(`Mã ${what} (chữ/số, ví dụ ${eg}):`); if (!id) return;
   if (!SiteLib.ID.test(id) || D.points[id]) return toast('Mã không hợp lệ hoặc đã có', 'warn');
-  const name = prompt('Tên trạm:', id) || id;
-  D.points[id] = { name, kind: 'station' }; sel = id; setDirty(true); render();
+  const name = prompt(`Tên ${what}:`, id) || id;
+  D.points[id] = { name, kind }; sel = id; setDirty(true); render();
 };
+$('addStation').onclick = addPoint('station', 'trạm', 'bar2');
+$('addEntrance').onclick = addPoint('entrance', 'cửa đón khách', 'door');
 
 // ---- Map (Task 11: canvas, teach by robot position, probe) ----
 let vm = null, mapT = 0, zoom = 1, lastMap = null, tapAt = null, mapPoll = 0;
@@ -446,11 +499,24 @@ function renderRoles() {
   const T = { loadSec: ['Chờ xếp đồ tại trạm', 'Quá giờ huỷ lệnh', 10], handoffSec: ['Chờ khách nhận món', 'Quá giờ mang về', 10], remindSec: ['Nhắc khách mỗi', '', 5], standbySec: ['Robot được gọi tới chờ tối đa', '', 30] };
   setHTML($('timing'), Object.entries(T).map(([k, [t, s, d]]) => `<div class="trow"><div><b>${t}</b>${s ? `<small>${s}</small>` : ''}</div>${stepper(`data-t="${k}"`, D.timing[k], d, 0, 3600, 's')}</div>`).join('') +
     `<div class="trow"><div><b>Số khay trên robot</b></div>${stepper('data-trays="1"', D.trays, 1, 1, 8)}</div>`);
+  D.notes = D.notes || [...SiteLib.NOTES];
+  setHTML($('notes'), (D.notes.length ? '' : '<p class="small muted">Không có chip — nhân viên gõ ghi chú tự do.</p>') +
+    D.notes.map((n, i) => `<div class="nrow"><input type="text" maxlength="24" data-note="${i}" value="${esc(n)}" aria-label="Ghi chú ${i + 1}">
+    <button class="btn sm" data-delnote="${i}" aria-label="Xoá ghi chú">✕</button></div>`).join('') +
+    `<button class="btn sm" id="addNote" ${D.notes.length >= 8 ? 'disabled' : ''}>+ Thêm</button>`);
 }
+$('notes').addEventListener('click', e => {
+  const d = e.target.closest('[data-delnote]');
+  if (d) D.notes.splice(+d.dataset.delnote, 1);
+  else if (e.target.id === 'addNote') D.notes.push('');
+  else return;
+  setDirty(true); renderRoles();
+});
 $('tab-roles').addEventListener('input', e => {
   const t = e.target, g = t.closest('[data-role-i]');
   if (t.dataset.t) D.timing[t.dataset.t] = t.value;
   else if (t.dataset.trays) D.trays = t.value;
+  else if (t.dataset.note) D.notes[+t.dataset.note] = t.value;
   else if (g) D.roles[+g.dataset.roleI][t.dataset.k] = t.value || null;
   setDirty(true);
 });
@@ -458,6 +524,142 @@ $('roles').addEventListener('click', e => {
   const b = e.target.closest('[data-rtab]'), g = b && b.closest('[data-role-i]');
   if (g) { D.roles[+g.dataset.roleI].tab = b.dataset.rtab; setDirty(true); renderRoles(); }
 });
+
+// ---- Tính năng: feature policy (spec §8), menu, bank ----
+// What the manager reads; the JSON keys never show.
+const FEATURES = {
+  busRobot: ['Thu dọn từ robot', 'Nhân viên tạo chuyến thu dọn ngay trên màn robot. Thu dọn tạo từ trạm luôn có.'],
+  callStaff: ['Gọi nhân viên', 'Nút trên trang QR và màn robot, báo về trạm nhận yêu cầu.'],
+  requestBill: ['Yêu cầu tính tiền', 'Khách báo muốn tính tiền; nhân viên chuẩn bị phiếu tại trạm.'],
+  order: ['Gọi món trên robot', 'Đơn gửi tới bếp/quầy theo thực đơn; nhân viên vẫn tạo chuyến giao.'],
+  pay: ['Thanh toán QR trên robot', 'Chỉ mở QR khi có phiếu tính tiền do nhân viên xác nhận. Khách báo đã chuyển chưa phải đã thu.'],
+  guide: ['Dẫn khách tới bàn', 'Nhân viên chọn bàn và xác nhận trước khi robot chạy.'],
+};
+const PRESETS = { 'table-service': 'Phục vụ tại bàn, trả sau', 'counter-prepaid': 'Đặt/trả trước tại quầy', buffet: 'Buffet, gọi hỗ trợ tại bàn', custom: 'Tự cấu hình' };
+const CANCEL_VI = { request: ['Báo nhân viên', 'Khách bấm “Báo nhầm món / Cần hỗ trợ”; robot giữ nguyên chuyến, nhân viên xem rồi thu hồi nếu cần.'],
+  direct: ['Khách tự gửi trả', 'Khách bấm “Yêu cầu mang món về” và xác nhận hai lần; robot bỏ điểm giao đó. Không phải hoàn tiền.'] };
+// Readiness reason -> [where it is fixed: '#field' on this tab or a tab key, button text].
+const FIX = { 'no-table': ['points', 'Thêm bàn'], 'no-start': ['points', 'Thêm trạm/cửa'], 'no-dish': ['points', 'Xem điểm rửa chén'],
+  'no-request-station': ['#reqStation', 'Chọn trạm'], 'no-bank': ['#payCard', 'Nhập tài khoản'], 'no-staff-verification': ['#payCard', 'Xem thanh toán'],
+  'no-item': ['#menuCard', 'Sửa thực đơn'], 'bad-price': ['#menuCard', 'Sửa thực đơn'], 'bad-category': ['#menuCard', 'Sửa thực đơn'], 'bad-station': ['#menuCard', 'Sửa thực đơn'] };
+const fix = code => code !== 'no-robot-route' ? FIX[code] : D.robots.some(r => r.driver === 'valetudo') ? ['points', 'Định vị bàn'] : ['robots', 'Xem robot'];
+const featState = r => !r.enabled ? ['Đã tắt', ''] : r.ready ? ['Đang bật', 'ok'] : ['Chưa đủ điều kiện', 'warn'];
+const profileVi = s => PRESETS[s.serviceProfile] || PRESETS.custom;
+const cancelVi = s => (CANCEL_VI[s.customerCancel] || CANCEL_VI.request)[0];
+const stationVi = s => { const id = (s.service || {}).requestStation; return id ? (s.points[id] || {}).name || id : 'Chưa chọn'; };
+
+function renderFeatures() {
+  D.menu = D.menu || { cats: [], items: [] };
+  renderPolicy();
+  const P = D.payment = D.payment || { bank: '', account: '', name: '' };
+  setHTML($('payment'), [['bank', 'Mã ngân hàng (VCB, TCB, MB…)'], ['account', 'Số tài khoản'], ['name', 'Tên chủ tài khoản']].map(([k, t]) =>
+    `<label>${t}<input type="text" data-pay="${k}" value="${esc(P[k] || '')}"${k === 'account' ? ' inputmode="numeric"' : ''}></label>`).join('') +
+    (P.qr ? `<div class="nrow"><img src="${esc(P.qr)}" alt="QR tĩnh"><button class="btn sm" id="qrDel">Xoá ảnh QR</button></div>` : ''));
+  const M = D.menu, stations = Object.keys(D.points).filter(k => D.points[k].kind === 'station');
+  const inp = (path, v, cls = '', type = 'text') => `<input type="${type}" class="${cls}" data-m="${path}" value="${esc(v ?? '')}">`;
+  setHTML($('menu'), `<table class="mtab"><tr class="muted small"><td>Mã</td><td>Danh mục</td><td>English</td><td>Trạm làm</td><td></td></tr>
+    ${M.cats.map((c, i) => `<tr><td>${inp(`cats.${i}.id`, c.id, 'id')}</td><td>${inp(`cats.${i}.vi`, c.vi)}</td><td>${inp(`cats.${i}.en`, c.en)}</td>
+      <td><select data-m="cats.${i}.station">${stations.map(st => `<option value="${st}" ${(c.station || SiteLib.firstStation(D)) === st ? 'selected' : ''}>${esc(D.points[st].name)}</option>`).join('')}</select></td>
+      <td><button class="btn sm" data-mdel="cats.${i}" aria-label="Xoá danh mục">✕</button></td></tr>`).join('')}</table>
+    <button class="btn sm" data-madd="cats">+ Thêm danh mục</button>
+    <table class="mtab"><tr class="muted small"><td>Mã</td><td>Món</td><td>English</td><td>Giá (đ)</td><td>Danh mục</td><td></td></tr>
+    ${M.items.map((it, i) => `<tr><td>${inp(`items.${i}.id`, it.id, 'id')}</td><td>${inp(`items.${i}.vi`, it.vi)}</td><td>${inp(`items.${i}.en`, it.en)}</td>
+      <td>${inp(`items.${i}.price`, it.price, '', 'number')}</td>
+      <td><select data-m="items.${i}.cat">${M.cats.map(c => `<option value="${esc(c.id)}" ${it.cat === c.id ? 'selected' : ''}>${esc(c.vi)}</option>`).join('')}</select></td>
+      <td><button class="btn sm" data-mdel="items.${i}" aria-label="Xoá món">✕</button></td></tr>`).join('')}</table>
+    <button class="btn sm primary" data-madd="items" ${M.cats.length ? '' : 'disabled'}>+ Thêm món</button>`);
+}
+// Rows are rebuilt only when stations / robots / notes change; switches, pills and reasons are updated in place,
+// so a toggle keeps its focus and typing in the menu re-checks readiness without losing the cursor.
+function renderPolicy() {
+  const stations = Object.keys(D.points).filter(k => D.points[k].kind === 'station'), n = (D.notes || SiteLib.NOTES).length;
+  const row = k => `<div class="feat"><div><b>${FEATURES[k][0]}</b><small>${FEATURES[k][1]}</small><div class="why" data-why="${k}"></div></div>
+    <span class="pill" data-pill="${k}"></span><label class="switch"><input type="checkbox" data-feat="${k}" aria-label="${FEATURES[k][0]}"><i></i></label></div>`;
+  setHTML($('policy'), `<div id="featNote"></div>
+    <div class="nrow"><select id="preset" aria-label="Mô hình phục vụ">${Object.entries(PRESETS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select><button class="btn sm" id="applyPreset">Áp dụng gợi ý</button></div>
+    <p class="small muted" style="margin:0">Gợi ý chỉ thay các lựa chọn bên dưới trong bản nháp; không đổi thực đơn, ngân hàng, robot hay ghi chú. <span id="profile"></span></p>
+    <section><p class="lbl grp">Nhân viên</p>${row('busRobot')}
+      <div class="feat"><div><b>Ghi chú nhanh</b><small>${n ? n + ' chip' : 'Không có chip'} trên máy trạm · chỉ là phím tắt nhập ghi chú</small></div><button class="btn sm" data-go="roles">Sửa ở Vai trò & thời gian</button></div></section>
+    <section><p class="lbl grp">Khách tại bàn</p>
+      <div class="feat"><div><b>Trạm nhận yêu cầu</b><small>Gọi nhân viên, tính tiền và thanh toán báo về trạm này</small></div>
+        <select id="reqStation"><option value="">Chưa chọn</option>${stations.map(s => `<option value="${esc(s)}">${esc(D.points[s].name)}</option>`).join('')}</select></div>
+      ${row('callStaff')}${row('requestBill')}
+      <div class="feat"><div><b>Khách trả/huỷ món</b><small id="cancelHint"></small></div><div class="seg sm">${Object.entries(CANCEL_VI).map(([k, [t]]) => `<button data-cancel="${k}">${t}</button>`).join('')}</div></div>
+      ${row('order')}${row('pay')}</section>
+    <section><p class="lbl grp">Đón khách</p>${row('guide')}
+      ${D.robots.map(r => `<div class="kv"><span>Robot ${esc(r.id)} · ${r.driver === 'valetudo' ? 'robot thật' : 'giả lập'}</span><span>${FeaturePolicy.capabilities(r).speedControl ? 'Có nút đi chậm' : 'Không chỉnh được tốc độ'}</span></div>`).join('')}</section>`);
+  const q = s => $('policy').querySelector(s);
+  for (const k of Object.keys(FEATURES)) {
+    const r = FeaturePolicy.readiness(D, k), [t, c] = featState(r), p = q(`[data-pill="${k}"]`);
+    q(`[data-feat="${k}"]`).checked = r.enabled;
+    p.textContent = t; p.className = 'pill ' + c;
+    setHTML(q(`[data-why="${k}"]`), !r.enabled || r.ready ? '' : r.reasons.map(x => {
+      const [to, b] = fix(x.code) || [];
+      return `<span>${esc(x.text)}</span>${to ? `<button class="btn sm" data-go="${to}">${b}</button>` : ''}`;
+    }).join(''));
+  }
+  $('reqStation').value = (D.service || {}).requestStation || '';
+  $('preset').value = PRESETS[D.serviceProfile] ? D.serviceProfile : 'custom';   // the current profile (picking another only changes on Áp dụng gợi ý)
+  for (const b of $('policy').querySelectorAll('[data-cancel]')) b.setAttribute('aria-pressed', D.customerCancel === b.dataset.cancel);
+  $('cancelHint').textContent = (CANCEL_VI[D.customerCancel] || CANCEL_VI.request)[1];
+  $('profile').textContent = 'Đang chọn: ' + profileVi(D) + '.';
+  const diff = dirty ? policyDiff() : [];
+  setHTML($('featNote'), (App.migrated ? '<div class="strip"><span class="kind">Cấu hình cũ</span><div class="grow">Cấu hình cũ đã được chuyển sang dạng mới — kiểm tra Trạm nhận yêu cầu rồi bấm Lưu</div><button class="btn sm dark" data-go="#reqStation">Xem trạm</button></div>' : '') +
+    (dirty ? `<div class="strip"><div class="grow"><b>Bản nháp — chưa áp dụng.</b> Bấm Lưu để áp dụng cho mọi máy.${diff.length ? `<ul>${diff.map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}</div></div>` : ''));
+}
+// The draft's feature choices that differ from the saved site, "label: before → after" (until Lưu or Huỷ thay đổi).
+function policyDiff() {
+  const S = App.site, out = [], onOff = (s, k) => ((s.features || {})[k] === true ? 'Bật' : 'Tắt');
+  const add = (t, a, b) => { if (a !== b) out.push(`${t}: ${a} → ${b}`); };
+  add('Mô hình phục vụ', profileVi(S), profileVi(D));
+  for (const k of Object.keys(FEATURES)) add(FEATURES[k][0], onOff(S, k), onOff(D, k));
+  add('Khách trả/huỷ món', cancelVi(S), cancelVi(D));
+  add('Trạm nhận yêu cầu', stationVi(S), stationVi(D));
+  return out;
+}
+// "Áp dụng gợi ý": only the draft changes (spec §4.2); nothing is sent before Lưu.
+function applyPreset(name) {
+  const p = FeaturePolicy.preset(name);
+  Object.assign(D, { serviceProfile: p.serviceProfile, features: { ...D.features, ...p.features }, customerCancel: p.customerCancel });
+  setDirty(true); renderFeatures();
+}
+// Reason links: '#id' focuses a field of this tab, anything else opens that tab.
+function goTo(to) {
+  if (to[0] !== '#') return showTab(to);
+  const el = document.querySelector(to), f = el.matches('input, select') ? el : el.querySelector('input, select, button');
+  el.scrollIntoView({ block: 'nearest' }); if (f) f.focus();
+}
+$('tab-features').addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.feat) { D.features[t.dataset.feat] = t.checked; D.serviceProfile = 'custom'; }
+  else if (t.id === 'reqStation') D.service = { ...D.service, requestStation: t.value || null };
+  else if (t.dataset.pay) D.payment[t.dataset.pay] = t.value;
+  else if (t.dataset.m) { const [list, i, k] = t.dataset.m.split('.'); D.menu[list][+i][k] = k === 'price' ? Number(t.value) : t.value; }
+  else return;
+  setDirty(true); renderPolicy();
+});
+$('tab-features').addEventListener('click', e => {
+  const del = e.target.closest('[data-mdel]'), add = e.target.closest('[data-madd]'), go = e.target.closest('[data-go]'), cancel = e.target.closest('[data-cancel]');
+  if (go) return goTo(go.dataset.go);
+  if (e.target.id === 'applyPreset') return applyPreset($('preset').value);
+  if (cancel) { if (D.customerCancel === cancel.dataset.cancel) return; D.customerCancel = cancel.dataset.cancel; D.serviceProfile = 'custom'; }
+  else if (e.target.id === 'qrDel') delete D.payment.qr;
+  else if (del) { const [list, i] = del.dataset.mdel.split('.'); D.menu[list].splice(+i, 1); }
+  else if (add) {
+    const list = add.dataset.madd, n = D.menu[list].length + 1;
+    D.menu[list].push(list === 'cats' ? { id: 'dm' + n, vi: '', en: '', station: SiteLib.firstStation(D) } : { id: 'mon' + n, cat: D.menu.cats[0].id, vi: '', en: '', price: 0 });
+  } else return;
+  setDirty(true); renderFeatures();
+});
+
+$('qrUpload').onchange = e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  if (f.size > 150 * 1024) return msg('Ảnh QR quá lớn (> 150 KB) — chụp/cắt nhỏ lại', 'err');
+  const rd = new FileReader();
+  rd.onload = () => { D.payment.qr = rd.result; setDirty(true); renderFeatures(); };
+  rd.readAsDataURL(f);
+};
 
 // ---- Backup ----
 function renderBackup() {
@@ -535,9 +737,19 @@ const CHK = { error: ['bad', '✕'], warn: ['warn', '!'], info: ['info', 'i'], o
 function renderChecks() {
   setHTML($('sysChecks'), checks().map(c => `<div class="chk ${CHK[c.level][0]}"><span class="ic">${CHK[c.level][1]}</span><div><b>${c.text}</b>${c.hint ? `<small>${c.hint}</small>` : ''}</div></div>`).join(''));
 }
+// Saved config (App.site), not the draft; changed only in the Tính năng tab.
+function renderSysFeatures() {
+  const S = App.site, kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
+  setHTML($('sysFeatures'), kv('Mô hình phục vụ', profileVi(S)) + Object.keys(FEATURES).map(k => {
+    const r = FeaturePolicy.readiness(S, k, App.map), [t, c] = featState(r);
+    return kv(FEATURES[k][0], `<span class="pill ${c}">${t}</span>`) + (r.enabled && !r.ready ? `<div class="why">${esc(r.reasons.map(x => x.text).join(' · '))}</div>` : '');
+  }).join('') + kv('Khách trả/huỷ món', cancelVi(S)) + kv('Trạm nhận yêu cầu', esc(stationVi(S))));
+}
+$('manageFeatures').onclick = () => showTab('features');
 function renderSystem() {
   const h = health;
   renderChecks();
+  renderSysFeatures();
   $('sysOffline').hidden = !healthErr;
   $('sysServerCard').hidden = $('sysMqtt').hidden = !h;
   $('ackIp').hidden = !(h && h.server.ipChanged);
@@ -582,12 +794,12 @@ $('save').onclick = () => {
 $('revert').onclick = () => load();
 addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });   // the logo link leaves the page
 $('strips').onclick = e => { if (e.target.id === 'reload') load(); if (e.target.dataset.act === 'ack') msg(''); };
-document.querySelector('.appbar .seg').onclick = e => {
-  const b = e.target.closest('[data-tab]'); if (!b) return;
-  tab = b.dataset.tab;
+function showTab(t) {
+  tab = t;
   const q = new URLSearchParams(location.search); q.set('tab', tab); history.replaceState(null, '', '?' + q);
   render();
-};
+}
+document.querySelector('.appbar .seg').onclick = e => { const b = e.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab); };
 
 connect(m => {
   if (m.type === 'site') {

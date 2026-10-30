@@ -1,10 +1,10 @@
 'use strict';
 // MEKONIQ Serve S1 — site config validation. The live site lives in Node-RED global context and is edited from
 // setup.html; everything saved goes through normalize() so a bad save can never take Node-RED down.
-// Also loaded by the browser (setup.html) the way map.html loads lib/route.js.
+// Also loaded by the browser (setup.html) the way map.html loads lib/route.js, after lib/feature-policy.js.
 
 const ID = /^[A-Za-z][A-Za-z0-9_-]{0,15}$/;
-const KINDS = ['table', 'station', 'dish', 'dock'];
+const KINDS = ['table', 'station', 'dish', 'dock', 'entrance'];   // entrance = where guests wait to be guided
 // Valetudo per-robot knobs: [default, min, max]. Hints shown by setup.html.
 const KNOBS = {
   arriveCm: [40, 0, 300], nomoveSec: [10, 5, 300], tripSec: [180, 5, 300],
@@ -12,6 +12,9 @@ const KNOBS = {
 };
 const RETRY_ERR = 'unreach|target|navigat|path';
 const MAX_BYTES = 512 * 1024;
+const Policy = (typeof require === 'function' && require('./feature-policy')) || globalThis.FeaturePolicy;
+const CANCEL = ['request', 'direct'];
+const NOTES = ['Không hành', 'Ít cay', 'Món nóng', 'Thêm chén'];   // station quick-note chips
 const TIMING = ['loadSec', 'handoffSec', 'remindSec', 'standbySec', 'lowBattery', 'chargedBattery'];
 
 // Validates and cleans a site coming from the UI. Returns {site, errors}; errors non-empty = reject.
@@ -20,7 +23,7 @@ function normalize(input, seed) {
   const errors = [];
   if (!input || typeof input !== 'object' || Array.isArray(input)) return { site: null, errors: ['Cấu hình không hợp lệ (không phải JSON object)'] };
   if (JSON.stringify(input).length > MAX_BYTES) return { site: null, errors: ['Cấu hình quá lớn (> 512 KB)'] };
-  const site = JSON.parse(JSON.stringify(input));
+  const site = Policy.migrate(input);   // deep clone, pre-v2 sites converted to featurePolicyVersion 2
   const num = (obj, key, min, max, where) => {
     if (obj[key] === undefined || obj[key] === null || obj[key] === '') { delete obj[key]; return; }
     const v = Number(obj[key]);
@@ -35,6 +38,23 @@ function normalize(input, seed) {
   for (const k of TIMING) { num(site.timing, k, 0, k.endsWith('Battery') ? 100 : 3600, 'timing'); if (site.timing[k] === undefined) site.timing[k] = seed.timing[k]; }
   if (site.timing.lowBattery >= site.timing.chargedBattery) errors.push(`timing: Pin yếu (${site.timing.lowBattery} %) phải thấp hơn Pin đủ (${site.timing.chargedBattery} %)`);
 
+  // Feature policy v2: missing = new-site default (preset custom); a flag must be a real boolean, "false" is not off.
+  const def = Policy.preset('custom');
+  const f = site.features = site.features && typeof site.features === 'object' && !Array.isArray(site.features) ? site.features : {};
+  delete f.call;
+  for (const k of Object.keys(def.features)) {
+    if (f[k] === undefined) f[k] = false;
+    else if (typeof f[k] !== 'boolean') errors.push(`Tính năng ${k}: phải là true hoặc false`);
+  }
+  if (site.customerCancel === undefined) site.customerCancel = def.customerCancel;
+  else if (!CANCEL.includes(site.customerCancel)) errors.push(`Khách huỷ món "${site.customerCancel}" không hợp lệ`);
+  if (site.serviceProfile === undefined) site.serviceProfile = def.serviceProfile;
+  else if (!Policy.preset(site.serviceProfile)) errors.push(`Mô hình phục vụ "${site.serviceProfile}" không hợp lệ`);
+  // Quick notes: missing = defaults, [] = no chips on purpose.
+  if (site.notes == null) site.notes = [...NOTES];
+  else if (!Array.isArray(site.notes)) errors.push('Ghi chú nhanh phải là danh sách');
+  else site.notes = site.notes.map(n => String(n ?? '').trim().slice(0, 24)).filter(Boolean).slice(0, 8);
+
   // points
   site.points = site.points && typeof site.points === 'object' ? site.points : {};
   const dishes = [];
@@ -46,6 +66,17 @@ function normalize(input, seed) {
     if (p.kind === 'dish') dishes.push(id);
     for (const k of ['x', 'y']) if (p[k] !== undefined) { const v = Number(p[k]); if (Number.isFinite(v)) p[k] = v; else delete p[k]; }
   }
+  menu(site, errors);
+  const sv = site.service = site.service && typeof site.service === 'object' ? site.service : {};
+  if (sv.requestStation == null || sv.requestStation === '') sv.requestStation = null;
+  else if (!site.points[sv.requestStation] || site.points[sv.requestStation].kind !== 'station') errors.push(`Trạm nhận yêu cầu "${sv.requestStation}" không phải điểm loại station`);
+  // Bank transfer details for the robot pay screen (features.pay); qr = static QR image uploaded in setup.
+  const pay = site.payment && typeof site.payment === 'object' ? site.payment : {};
+  site.payment = { ...pay, bank: String(pay.bank || '').trim().slice(0, 20), account: String(pay.account || '').replace(/[\s.-]/g, ''), name: String(pay.name || '').trim().slice(0, 60), verification: pay.verification ?? 'staff' };
+  if (!/^\d*$/.test(site.payment.account)) errors.push('payment.account: chỉ gồm chữ số');
+  if (site.payment.verification !== 'staff') errors.push('payment.verification: chỉ hỗ trợ nhân viên xác nhận (staff)');
+  if (pay.qr === undefined || pay.qr === '') delete site.payment.qr;
+  else if (!/^data:image\/(png|jpeg|webp);base64,/.test(String(pay.qr)) || String(pay.qr).length > 200 * 1024) errors.push('payment.qr: phải là ảnh PNG/JPEG/WebP ≤ 200 KB');
   if (dishes.length !== 1) errors.push(`Phải có đúng một điểm loại dish (khu rửa chén), hiện có ${dishes.length}`);
   if (!site.points[site.dishPoint] || site.points[site.dishPoint].kind !== 'dish') errors.push(`dishPoint "${site.dishPoint}" phải là điểm loại dish`);
 
@@ -88,9 +119,41 @@ function normalize(input, seed) {
   return { site, errors };
 }
 
-// Point ids and robot ids referenced by open missions — they cannot be deleted while in use.
+// Robot menu (features.order): cats [{id, vi, en, station}], items [{id, cat, vi, en, price}] in VND.
+const firstStation = site => Object.keys(site.points || {}).find(k => site.points[k].kind === 'station');
+function menu(site, errors) {
+  const m = site.menu && typeof site.menu === 'object' ? site.menu : {};
+  const cats = Array.isArray(m.cats) ? m.cats.filter(x => x && typeof x === 'object') : [];
+  const items = Array.isArray(m.items) ? m.items.filter(x => x && typeof x === 'object') : [];
+  const seen = new Set();
+  const named = (x, what) => {
+    x.id = String(x.id || '');
+    if (!ID.test(x.id)) errors.push(`${what} "${x.id}": id không hợp lệ`);
+    else if (seen.has(x.id)) errors.push(`${what} "${x.id}" bị trùng`);
+    seen.add(x.id);
+    x.vi = String(x.vi || x.id).slice(0, 40); x.en = String(x.en || x.vi).slice(0, 40);
+  };
+  for (const c of cats) {
+    named(c, 'Danh mục');
+    c.station = String(c.station || firstStation(site) || '');
+    if (!site.points[c.station] || site.points[c.station].kind !== 'station') errors.push(`Danh mục "${c.id}": trạm "${c.station}" không phải điểm loại station`);
+  }
+  seen.clear();
+  for (const it of items) {
+    named(it, 'Món');
+    if (!cats.some(c => c.id === it.cat)) errors.push(`Món "${it.id}": danh mục "${it.cat}" không tồn tại`);
+    const p = Number(it.price);
+    if (!Number.isInteger(p) || p < 0) errors.push(`Món "${it.id}": price phải là số nguyên ≥ 0 (VND)`);
+    else it.price = p;
+  }
+  site.menu = { ...m, cats, items };
+}
+
+// Point ids and robot ids referenced by open missions, orders or bills — they cannot be deleted while in use.
+// tables = the subset held by open orders/bills (must also stay kind 'table'). Orders/bills of a table already
+// gone from the site (deleted before orders counted here) are ignored, else they would lock every save forever.
 function inUse(site, st) {
-  const points = new Set(), robots = new Set();
+  const points = new Set(), robots = new Set(), tables = new Set(), P = (site && site.points) || {};
   const open = s => s.status === 'pending' || s.status === 'active';
   for (const m of (st && st.missions) || []) {
     if (!['queued', 'active', 'pending'].includes(m.status)) continue;
@@ -98,7 +161,10 @@ function inUse(site, st) {
     if (m.robot) robots.add(m.robot);
   }
   for (const [id, r] of Object.entries((st && st.robots) || {})) if (r.mission) robots.add(id);
-  return { points, robots };
+  for (const o of (st && st.orders) || []) if (o.status !== 'closed' && P[o.table]) tables.add(o.table);
+  for (const b of (st && st.bills) || []) if (b.status !== 'closed' && b.status !== 'void' && P[b.table]) tables.add(b.table);
+  for (const t of tables) points.add(t);
+  return { points, robots, tables };
 }
 
 // First free table id T01, T02, …
@@ -109,4 +175,4 @@ function nextTable(site) {
   }
 }
 
-module.exports = { normalize, inUse, nextTable, KNOBS, RETRY_ERR, MAX_BYTES, ID, KINDS };
+module.exports = { normalize, inUse, nextTable, KNOBS, RETRY_ERR, MAX_BYTES, ID, KINDS, NOTES, firstStation };

@@ -25,65 +25,153 @@
   .item .act { min-height: 56px; }
   .item .act b { font-size: 17px; }
   .empty { text-align: center; color: var(--muted); padding: 24px 0; }
+  #lang button { min-height: 36px; padding: 6px 12px; }
+  footer.ft { position: sticky; bottom: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); background: #f6f8f4; border-top: 1px solid var(--line); }
+  footer.ft .act { min-height: 64px; }
+  footer.ft .act b { font-size: 17px; }
+  body.ft .toasts { bottom: 120px; }
 </style>
 </head><body>
 <div class="phone">
-<header class="hd"><div id="brand"></div><div id="lang"></div><span class="dot" id="conn" title="Kết nối"></span></header>
+<header class="hd"><div id="brand"></div><div class="seg" id="lang"></div><span class="dot" id="conn" title="Kết nối"></span></header>
 <main>
-  <div><p class="eyebrow">Theo dõi món của bạn</p><h1 id="title">Bàn</h1></div>
+  <div><p class="eyebrow" id="eyebrow"></p><h1 id="title">Bàn</h1></div>
   <div id="list"></div>
-  <p class="small muted">Bạn có thể huỷ món đang trên đường tới. Nếu món đã lên khay, robot sẽ mang món về lại bếp/quầy. Cần hỗ trợ khác, vui lòng gọi nhân viên.</p>
+  <p class="small muted" id="help"></p>
 </main>
-<!-- Footer "Gọi nhân viên" / "Xin hoá đơn": phase 2, see spec §6.1 (not rendered in phase 1). -->
+<footer class="ft" id="foot" hidden></footer>
 </div>
-<div id="offline" hidden>Mất kết nối — đang kết nối lại…</div>
-<script src="transport.js"></script><script src="common.js"></script>
+<div id="offline" hidden></div>
+<script src="lib/feature-policy.js"></script><script src="transport.js"></script><script src="common.js"></script>
 <script>
 // Opened from the QR code on each table: table.html?t=T05
 const T = new URLSearchParams(location.search).get('t') || 'T01';
 const $ = id => document.getElementById(id);
-$('brand').innerHTML = BRAND('Serve S1 · Khách hàng');
 
+// Guest-facing strings, VI + EN (spec 6.5). Functions take the params status() returns.
+const DICT = {
+  vi: { brand: 'Serve S1 · Khách hàng', eyebrow: 'Theo dõi món của bạn', table: t => 'Bàn ' + t, food: 'Món ăn', drink: 'Đồ uống', tray: 'khay',
+    help: 'Nhầm món hoặc cần hỗ trợ với món đang tới? Bấm “Báo nhầm món / Cần hỗ trợ”, nhân viên sẽ tới bàn.',
+    helpDirect: 'Bạn có thể yêu cầu robot mang món đang tới về lại bếp/quầy. Đây chỉ là xử lý chuyến giao, không phải hoàn tiền. Cần hỗ trợ khác, vui lòng gọi nhân viên.',
+    empty: 'Chưa có món nào đang tới bàn của bạn.', offline: 'Mất kết nối — đang kết nối lại…',
+    manual: () => 'Nhân viên sẽ mang món tới bàn', done: () => 'Đã nhận · chúc ngon miệng', mine: () => 'Bạn đã yêu cầu mang món này về', cancelled: () => 'Món đã được huỷ', queued: () => 'Đang chờ robot',
+    prep: p => `${p.place} đang chuẩn bị · robot ${p.robot} tới lấy`, here: p => `Robot ${p.robot} đã tới bàn — mời lấy món ở khay ${p.tray}`,
+    coming: p => `Robot ${p.robot} đang tới bàn bạn`, other: p => `Robot ${p.robot} đang giao bàn khác trước, sau đó tới bàn bạn`,
+    paused: ' (robot đang tạm dừng)', cancel: 'Yêu cầu mang món về', sure: 'Chạm lần nữa — mang món về, không phải hoàn tiền', cancelOk: 'Robot sẽ mang món về',
+    ret: 'Báo nhầm món / Cần hỗ trợ', retOk: 'Đã báo nhân viên — vui lòng chờ', sending: 'Đang gửi…',
+    order: 'Đơn', orderNew: 'Bếp đã nhận · đang chuẩn bị', orderPaid: 'Đã báo chuyển khoản · chờ nhân viên xác nhận', total: 'Tổng',
+    staff: 'Gọi nhân viên', bill: 'Yêu cầu tính tiền', staffOk: 'Đã gọi nhân viên — vui lòng chờ', billOk: 'Đã yêu cầu tính tiền — nhân viên sẽ tới', moved: t => `Món này của ${t} — bếp đã sửa nhầm bàn` },
+  en: { brand: 'Serve S1 · Guest', eyebrow: 'Track your order', table: t => 'Table ' + t, food: 'Food', drink: 'Drinks', tray: 'tray',
+    help: 'Wrong item or need help with an item on its way? Tap “Wrong item / Need help” and staff will come to your table.',
+    helpDirect: 'You can ask the robot to take an item on its way back to the kitchen/bar. This only changes the delivery trip, it is not a refund. For anything else, please call staff.',
+    empty: 'Nothing on its way to your table yet.', offline: 'Connection lost — reconnecting…',
+    manual: () => 'Staff will bring your food to the table', done: () => 'Received · enjoy your meal', mine: () => 'You sent this item back', cancelled: () => 'This item was cancelled', queued: () => 'Waiting for a robot',
+    prep: p => `${p.place} is preparing · robot ${p.robot} picks it up`, here: p => `Robot ${p.robot} is at your table — please take tray ${p.tray}`,
+    coming: p => `Robot ${p.robot} is on the way to your table`, other: p => `Robot ${p.robot} serves another table first, then yours`,
+    paused: ' (robot paused)', cancel: 'Send this item back', sure: 'Tap again — trip only, not a refund', cancelOk: 'The robot takes it back',
+    ret: 'Wrong item / Need help', retOk: 'Staff notified — please wait', sending: 'Sending…',
+    order: 'Order', orderNew: 'Kitchen received · preparing', orderPaid: 'Payment reported · waiting for staff', total: 'Total',
+    staff: 'Call staff', bill: 'Request the bill', staffOk: 'Staff called — please wait', billOk: 'Bill requested — staff will come', moved: t => `This item was for ${t} — the kitchen fixed a mix-up` },
+};
+let lang = 'vi';
+try { if (localStorage.getItem('mekoniq.lang') === 'en') lang = 'en'; } catch (e) {}
+const tr = k => DICT[lang][k];
+const both = k => [DICT.vi[k], DICT.en[k]];   // request() success text; App.lang picks the line
+App.lang = lang;
+
+// Delivery status of one stop -> [key, params, step 0-4, tone]. Shared by both languages.
+function status(m, i, s, r) {
+  const open = s.status === 'pending' || s.status === 'active';
+  if (s.status === 'done') return ['done', {}, 4, 'ok'];
+  if (s.status === 'manual') return ['manual', {}, 3, ''];
+  if (!open) return [s.why === 'customer' ? 'mine' : 'cancelled', {}, 0, 'cancel'];
+  if (m.status === 'queued') return ['queued', {}, 1, ''];
+  if (!m.loaded) return ['prep', { place: pname(m.stops[0].p), robot: m.robot }, 2, ''];
+  if (m.cur === i && r.phase === 'atStop') return ['here', { robot: m.robot, tray: s.tray }, 4, 'ok'];
+  if (m.cur === i) return ['coming', { robot: m.robot }, 3, ''];
+  return ['other', { robot: m.robot }, 3, ''];
+}
 function item(m, i, s) {
   const r = m.robot && App.state.robots.find(x => x.id === m.robot);
-  const what = pname(m.stops[0].p) === 'Quầy pha chế' ? 'Đồ uống' : 'Món ăn';
-  let text, step, tone = '';
+  const what = tr(pname(m.stops[0].p) === 'Quầy pha chế' ? 'drink' : 'food');
   const open = s.status === 'pending' || s.status === 'active';
-  if (s.status === 'done') [text, step, tone] = ['Đã nhận · chúc ngon miệng', 4, 'ok'];
-  else if (s.status === 'manual') [text, step] = ['Nhân viên sẽ mang món tới bàn', 3];
-  else if (!open) [text, step, tone] = [s.why === 'customer' ? 'Bạn đã huỷ món này' : 'Món đã được huỷ', 0, 'cancel'];
-  else if (m.status === 'queued') [text, step] = ['Đang chờ robot', 1];
-  else if (!m.loaded) [text, step] = [`${pname(m.stops[0].p)} đang chuẩn bị · robot ${m.robot} tới lấy`, 2];
-  else if (m.cur === i && r.phase === 'atStop') [text, step, tone] = [`Robot ${m.robot} đã tới bàn — mời lấy món ở khay ${s.tray}`, 4, 'ok'];
-  else if (m.cur === i) [text, step] = [`Robot ${m.robot} đang tới bàn bạn`, 3];   // no live ETA: it would rebuild the cancel button every second
-  else [text, step] = [`Robot ${m.robot} đang giao bàn khác trước, sau đó tới bàn bạn`, 3];
-  if (open && r && r.halt) text += ' (robot đang tạm dừng)';
-  const k = `c-${m.id}-${i}`;
+  const [key, params, step, tone] = status(m, i, s, r);
+  const text = tr(key)(params) + (open && r && r.halt ? tr('paused') : '');
   return `<div class="card item">
-    <div class="row"><b>${what} #${m.id}${s.tray ? ' · khay ' + s.tray : ''}</b><span class="small muted">${clock(m.createdAt)}</span></div>
+    <div class="row"><b>${what} #${m.id}${s.tray ? ` · ${tr('tray')} ${s.tray}` : ''}</b><span class="small muted">${clock(m.createdAt)}</span></div>
     <div class="what">${esc(m.note || what)}</div>
     ${step ? `<div class="steps">${[1, 2, 3, 4].map(n => `<i class="${n <= step ? 'on' : ''}"></i>`).join('')}</div>` : ''}
     <div class="status ${tone}">${esc(text)}</div>
-    ${open ? `<button class="act warn${isArmed(k) ? ' armed' : ''}" data-m="${m.id}" data-s="${i}"><b>${isArmed(k) ? 'Chạm lần nữa để huỷ món' : 'Huỷ món này'}</b></button>` : ''}
+    ${open ? problemBtn(m, i, key === 'here' ? 'wrong-item' : 'need-help') : ''}
   </div>`;
 }
+// Problem with an item on its way (F05): policy request tells staff (the trip goes on); direct sends it back after two taps.
+// Both name this table, so the server refuses an item the kitchen has since moved to another table.
+function problemBtn(m, i, reason) {
+  const data = `data-m="${m.id}" data-s="${i}" data-reason="${reason}"`;
+  if (App.site.customerCancel === 'direct') { const k = `c-${m.id}-${i}`; return `<button class="act warn${isArmed(k) ? ' armed' : ''}" data-act="cancelStop" ${data}><b>${tr(isArmed(k) ? 'sure' : 'cancel')}</b></button>`; }
+  const busy = sending(q => q.type === 'returnRequest' && q.mission === m.id && q.stop === i);
+  return `<button class="act warn" data-act="returnRequest" ${data}${busy ? ' disabled' : ''}><b>${tr(busy ? 'sending' : 'ret')}</b></button>`;
+}
+// Orders placed on the robot screen (spec 6.3); their delivery still shows as missions below.
+function orderCard(o) {
+  const M = App.site.menu || { items: [] }, name = id => { const it = M.items.find(i => i.id === id); return it ? it[lang] || it.vi : id; };
+  return `<div class="card item">
+    <div class="row"><b>${tr('order')} #${o.id}</b><span class="small muted">${clock(o.t)}</span></div>
+    <div class="what">${o.items.map(i => `${esc(name(i.id))} ×${i.qty}`).join(' · ')}</div>
+    <div class="row"><span class="small muted">${tr('total')}</span><b>${vnd(o.total)}</b></div>
+    <div class="status ${o.status === 'new' ? '' : 'ok'}">${tr(o.status === 'new' ? 'orderNew' : 'orderPaid')}</div></div>`;
+}
+// Call buttons rest 30 s after the server took the call; the station alert stays until staff ack it anyway.
+const callUntil = { staff: 0, bill: 0 }, FLAG = { staff: 'callStaff', bill: 'requestBill' };
 function render() {
+  setHTML($('lang'), ['vi', 'en'].map(l => `<button data-lang="${l}" aria-pressed="${l === lang}">${l.toUpperCase()}</button>`).join(''));
+  setHTML($('brand'), BRAND(tr('brand')));
+  $('eyebrow').textContent = tr('eyebrow');
+  $('help').textContent = tr(App.site && App.site.customerCancel === 'direct' ? 'helpDirect' : 'help');
+  $('offline').textContent = tr('offline');
+  document.documentElement.lang = lang;
+  if (!App.site) return;
+  $('title').textContent = App.site.points[T] ? tr('table')(short(T)) : T;
+  const calls = ['staff', 'bill'].filter(w => feat(FLAG[w]));   // independent flags (F06, F07)
+  $('foot').hidden = !calls.length;
+  document.body.classList.toggle('ft', !!calls.length);
+  setHTML($('foot'), calls.map(w => { const busy = sending(q => q.type === 'call' && q.what === w);
+    return `<button class="act ${w === 'staff' ? 'primary' : 'outline'}" data-call="${w}" ${busy || Date.now() < callUntil[w] ? 'disabled' : ''}><b>${tr(busy ? 'sending' : w)}</b></button>`; }).join(''));
   if (!App.state) return;
-  $('title').textContent = pname(T);
-  const rows = [];
+  const rows = (App.state.orders || []).filter(o => o.table === T).map(orderCard);
   for (const m of [...App.state.missions, ...App.state.history]) {
     if (m.status !== 'queued' && m.status !== 'active' && serverNow() - (m.endedAt || 0) > 30 * 60 * 1000) continue;
     m.stops.forEach((s, i) => { if (s.a === 'handoff' && s.p === T) rows.push(item(m, i, s)); });
   }
-  setHTML($('list'), rows.join('') || '<p class="empty">Chưa có món nào đang tới bàn của bạn.</p>');
+  setHTML($('list'), rows.join('') || `<p class="empty">${tr('empty')}</p>`);
 }
-$('list').addEventListener('click', e => {
-  const b = e.target.closest('[data-m]');
+$('lang').addEventListener('click', e => {
+  const b = e.target.closest('[data-lang]');
   if (!b) return;
-  const m = +b.dataset.m, s = +b.dataset.s;
-  armed(`c-${m}-${s}`, () => send({ type: 'cancelStop', mission: m, stop: s, why: 'customer', by: 'Khách ' + pname(T) + ' (QR)' }), render);
+  lang = App.lang = b.dataset.lang;
+  try { localStorage.setItem('mekoniq.lang', lang); } catch (err) {}
+  render();
 });
-connect(m => { if (m.type === 'state') render(); });
+$('foot').addEventListener('click', e => {
+  const b = e.target.closest('[data-call]');
+  if (!b || b.disabled) return;
+  const what = b.dataset.call;
+  request({ type: 'call', point: T, what, by: 'Khách ' + pname(T) + ' (QR)' }, both(what + 'Ok'), rep => { if (rep.ok) callUntil[what] = Date.now() + 30000; render(); }, true);
+  render();
+});
+$('list').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b || b.disabled) return;
+  const d = { mission: +b.dataset.m, stop: +b.dataset.s, table: T, by: 'Khách ' + pname(T) + ' (QR)' };
+  if (b.dataset.act === 'returnRequest') { request({ type: 'returnRequest', ...d, reason: b.dataset.reason }, both('retOk'), render, true); render(); }
+  else armed(`c-${d.mission}-${d.stop}`, () => request({ type: 'cancelStop', ...d, why: 'customer' }, both('cancelOk'), render), render);
+});
+render();
+connect(m => {
+  if (m.type === 'event' && m.table === T && m.moved) toast(tr('moved')(tr('table')(short(m.moved))), 'warn');   // spec 6.9: the station moved our item to another table
+  if (m.type === 'state' || m.type === 'site') render();
+});
 setInterval(render, 1000);
 </script>
 </body></html>

@@ -570,5 +570,133 @@
       }
     ]
   },
-  "rev": 0
+  "rev": 0,
+  "featurePolicyVersion": 2,
+  "serviceProfile": "custom",
+  "features": {
+    "callStaff": true,
+    "requestBill": true,
+    "guide": true,
+    "order": true,
+    "pay": true,
+    "busRobot": true
+  },
+  "customerCancel": "request",
+  "service": {
+    "requestStation": "kitchen"
+  },
+  "notes": [
+    "Không hành",
+    "Ít cay",
+    "Món nóng",
+    "Thêm chén"
+  ],
+  "menu": {
+    "cats": [
+      {
+        "id": "mon",
+        "vi": "Món chính",
+        "en": "Mains",
+        "station": "kitchen"
+      },
+      {
+        "id": "nuoc",
+        "vi": "Đồ uống",
+        "en": "Drinks",
+        "station": "bar"
+      }
+    ],
+    "items": [
+      {
+        "id": "pho",
+        "cat": "mon",
+        "vi": "Phở bò",
+        "en": "Beef pho",
+        "price": 65000
+      },
+      {
+        "id": "buncha",
+        "cat": "mon",
+        "vi": "Bún chả",
+        "en": "Grilled pork & noodles",
+        "price": 60000
+      },
+      {
+        "id": "comtam",
+        "cat": "mon",
+        "vi": "Cơm tấm sườn",
+        "en": "Broken rice, pork chop",
+        "price": 55000
+      },
+      {
+        "id": "bunbo",
+        "cat": "mon",
+        "vi": "Bún bò Huế",
+        "en": "Hue beef noodle soup",
+        "price": 65000
+      },
+      {
+        "id": "goicuon",
+        "cat": "mon",
+        "vi": "Gỏi cuốn",
+        "en": "Fresh spring rolls",
+        "price": 45000
+      },
+      {
+        "id": "banhmi",
+        "cat": "mon",
+        "vi": "Bánh mì thịt",
+        "en": "Banh mi",
+        "price": 35000
+      },
+      {
+        "id": "cafe",
+        "cat": "nuoc",
+        "vi": "Cà phê sữa đá",
+        "en": "Iced milk coffee",
+        "price": 29000
+      },
+      {
+        "id": "trada",
+        "cat": "nuoc",
+        "vi": "Trà đá",
+        "en": "Iced tea",
+        "price": 5000
+      },
+      {
+        "id": "tranh",
+        "cat": "nuoc",
+        "vi": "Trà chanh",
+        "en": "Lemon tea",
+        "price": 25000
+      },
+      {
+        "id": "cam",
+        "cat": "nuoc",
+        "vi": "Nước cam",
+        "en": "Orange juice",
+        "price": 35000
+      },
+      {
+        "id": "sinhto",
+        "cat": "nuoc",
+        "vi": "Sinh tố bơ",
+        "en": "Avocado smoothie",
+        "price": 40000
+      },
+      {
+        "id": "bia",
+        "cat": "nuoc",
+        "vi": "Bia Sài Gòn",
+        "en": "Saigon beer",
+        "price": 25000
+      }
+    ]
+  },
+  "payment": {
+    "bank": "VCB",
+    "account": "0000000000",
+    "name": "MEKONIQ DEMO",
+    "verification": "staff"
+  }
 }

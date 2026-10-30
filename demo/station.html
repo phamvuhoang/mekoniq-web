@@ -9,8 +9,8 @@
   .appbar .title { flex: none; }
   .appbar .right { gap: 12px; }
   #monLinks { display: flex; gap: 8px; }
-  /* Monitor: no role picker on the bar (room for the links); the role still applies (log name, sounds). */
-  .screen[data-v=mon] #roleSeg { display: none; }
+  /* Monitor / billing: no role picker on the bar (room for the links); the role still applies (log name, sounds). */
+  .screen:is([data-v=mon], [data-v=bill]) #roleSeg { display: none; }
   #roleSeg .more { padding: 8px 12px; }
   #strips { flex: none; max-height: 30vh; overflow: auto; }
 
@@ -33,7 +33,12 @@
   .queue li b { font-size: 14px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .queue li small { font-size: 12px; font-weight: 700; color: var(--gray); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .queue li small.warn { color: var(--warn-ink); } .queue li small.danger { color: var(--danger); } .queue li small.go { color: var(--green); }
-  .queue li > :is(button, .lock) { grid-row: 1 / span 2; grid-column: 2; }
+  .queue li > :is(button, .lock, .qa) { grid-row: 1 / span 2; grid-column: 2; }
+  .queue .qa { display: flex; gap: 6px; align-items: center; }
+  .rt { min-height: 40px; padding: 0 10px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--card); color: var(--deep); font: 800 13px var(--font); }
+  .rt[aria-pressed=true] { background: var(--deep); border-color: var(--deep); color: var(--mint); }
+  #pvSend .rts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tt:disabled { opacity: .35; }
   .queue li .pill { padding: 0 6px; font-size: 11px; vertical-align: 2px; margin-right: 4px; }
   .queue .x { min-width: 40px; height: 40px; padding: 0 8px; border: 1.5px solid var(--pill-danger); border-radius: 12px; background: var(--card); color: var(--danger); font-weight: 900; }
   .queue .x.armed { background: var(--danger); border-color: var(--danger); color: var(--card); animation: pulse 1s infinite; }
@@ -87,7 +92,7 @@
   @media (orientation: portrait), (max-width: 900px) {
     .appbar .title { display: none; }
     .appbar { gap: 10px; padding: 0 12px; }
-    .seg.dark button { padding: 8px 10px; }
+    .seg.dark button { padding: 8px 7px; }   /* 4 roles + 3 views + clock fit in 800 px */
     .screen[data-v=desk] #snd { display: none; }
     .desk { grid-template: auto minmax(0, 1fr) auto / minmax(0, 1fr); }
     .side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.3fr); gap: 8px; }
@@ -100,7 +105,7 @@
   }
   :root[data-orient=portrait] .appbar .title { display: none; }
   :root[data-orient=portrait] .appbar { gap: 10px; padding: 0 12px; }
-  :root[data-orient=portrait] .seg.dark button { padding: 8px 10px; }
+  :root[data-orient=portrait] .seg.dark button { padding: 8px 7px; }
   :root[data-orient=portrait] .screen[data-v=desk] #snd { display: none; }
   :root[data-orient=portrait] .desk { grid-template: auto minmax(0, 1fr) auto / minmax(0, 1fr); }
   :root[data-orient=portrait] .side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.3fr); gap: 8px; }
@@ -154,6 +159,7 @@
   /* Missions */
   .mission { border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
   .mission.urgent { border-color: var(--accent); border-width: 2px; }
+  .mission.focus { border: 2px solid var(--deep); box-shadow: 0 0 0 3px var(--mint); }
   .mrow { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
   .mrow > b { font-weight: 900; color: var(--deep); }
   .stops { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
@@ -200,6 +206,36 @@
   :root[data-orient=portrait] .mapcard { flex: 0 0 auto; aspect-ratio: var(--ar, 16 / 10); max-height: 42vh; }
   :root[data-orient=portrait] .ktiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
+  /* Billing (spec §7): tables with open orders / bills / bill requests | the chosen table. Both cards scroll inside. */
+  .billv { grid-template: minmax(0, 1fr) / 300px minmax(0, 1fr); }
+  .blist { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: auto; }
+  .bdet { --act-h: 60px; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; }
+  .blist select { flex: none; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+  .bdet > div { display: flex; flex-direction: column; gap: 10px; }
+  .bdet > div:empty { display: none; }
+  .bdet h2 { margin: 0; font-size: 22px; font-weight: 900; color: var(--deep); }
+  .bdet .field { margin: 0; }
+  .bdet .act { flex: none; }
+  .bdet .act b { font-size: 18px; }
+  .brow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .brow .grow { flex: 1; min-width: 0; font-weight: 700; }
+  .breq { padding: 8px 12px; border-radius: 12px; background: var(--pill-warn); color: var(--warn-ink); }
+  .btab { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .btab td { padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .btab td + td { text-align: right; font-family: var(--mono); white-space: nowrap; }
+  .btab tr.oh td { padding-top: 10px; font-weight: 900; color: var(--deep); }
+  .btab tr.tot td { border: 0; font-size: 17px; font-weight: 900; }
+  .bsum { font-size: 30px; font-weight: 900; color: var(--deep); }
+  .bwarn { margin: 0; padding: 8px 12px; border-radius: 12px; background: var(--pill-danger); color: var(--danger); font-weight: 800; }
+  @media (orientation: portrait), (max-width: 900px) {
+    .billv { grid-template: minmax(0, 1fr) minmax(0, 2.6fr) / minmax(0, 1fr); }
+    .blist { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-content: start; }
+    .blist > :is(.eyebrow, .empty, select) { grid-column: 1 / -1; }
+  }
+  :root[data-orient=portrait] .billv { grid-template: minmax(0, 1fr) minmax(0, 2.6fr) / minmax(0, 1fr); }
+  :root[data-orient=portrait] .blist { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-content: start; }
+  :root[data-orient=portrait] .blist > :is(.eyebrow, .empty, select) { grid-column: 1 / -1; }
+
   dialog { border: 0; border-radius: var(--radius); padding: 24px; background: var(--card); color: var(--fg); width: min(460px, calc(100vw - 32px)); }
   dialog::backdrop { background: rgba(7, 29, 33, .6); }
   .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
@@ -244,6 +280,11 @@
     </section>
   </main>
 
+  <main class="billv body" id="bill" hidden>
+    <section class="card blist" id="blist"></section>
+    <section class="card bdet"><div id="bHead"></div><div id="bForm"></div><div id="bActs"></div></section>
+  </main>
+
   <footer class="kpis" id="foot"></footer>
 </div>
 
@@ -256,13 +297,13 @@
 </dialog>
 <div id="offline" hidden>Mất kết nối tới hệ thống điều phối — đang kết nối lại…</div>
 
-<script src="transport.js"></script><script src="common.js"></script><script src="vmap.js"></script>
+<script src="lib/feature-policy.js"></script><script src="transport.js"></script><script src="common.js"></script><script src="vmap.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 
 // ---- App bar: role segmented (left), view segmented + sound (right) ----
 $('bar').outerHTML = APPBAR({ title: 'MEKONIQ Serve', sub: 'Điều phối · Dispatch',
-  right: `<div class="seg dark" id="views"><button data-view="desk">Điều phối</button><button data-view="mon">Giám sát</button></div>
+  right: `<div class="seg dark" id="views"><button data-view="desk">Điều phối</button><button data-view="mon">Giám sát</button><button data-view="bill">Tính tiền</button></div>
     <span id="monLinks" hidden><a class="lnk" id="routeLnk" href="map.html" target="_blank" hidden>Thiết kế lộ trình ↗</a><a class="lnk" href="setup.html" target="_blank">Cấu hình ↗</a></span>
     <button class="lnk snd" id="snd">Bật âm thanh</button>` });
 document.querySelector('.appbar .title').insertAdjacentHTML('afterend', '<div class="seg dark" id="roleSeg"></div>');
@@ -320,17 +361,19 @@ document.addEventListener('click', () => {
 function setView(v) {
   for (const x of $('views').children) x.setAttribute('aria-pressed', x.dataset.view === v);
   $('desk').hidden = $('foot').hidden = v !== 'desk';
-  $('mon').hidden = $('monLinks').hidden = v === 'desk';
+  $('mon').hidden = $('monLinks').hidden = v !== 'mon';
+  $('bill').hidden = v !== 'bill';
   document.querySelector('.screen').dataset.v = v;
-  document.querySelector('.appbar .title small').textContent = v === 'desk' ? 'Điều phối · Dispatch' : 'Giám sát · Monitor';
-  if (v === 'mon' && App.site) render();
+  document.querySelector('.appbar .title small').textContent = { desk: 'Điều phối · Dispatch', mon: 'Giám sát · Monitor', bill: 'Tính tiền · Billing' }[v];
+  if (v !== 'desk' && App.site) render();
 }
 $('views').onclick = e => { const b = e.target.closest('[data-view]'); if (b) setView(b.dataset.view); };
-setView(['desk', 'mon'].includes(qs.get('view')) ? qs.get('view') : me && me.role === 'ql' ? 'mon' : 'desk');
+setView(['desk', 'mon', 'bill'].includes(qs.get('view')) ? qs.get('view') : me && me.role === 'ql' ? 'mon' : 'desk');
 
 // ---- Desk: pick robot + task + tables, check the order preview, one big send button ----
-const F = { tab: 'deliver', from: 'kitchen', tables: [], table: null, to: null, robot: 'any', urgent: false, chips: [], free: '' };
-const NOTES = ['Không hành', 'Ít cay', 'Món nóng', 'Thêm chén'];   // ponytail: fixed list; phase 2 moves it to site.notes
+const F = { tab: 'deliver', from: 'kitchen', tables: [], table: null, to: null, robot: 'any', urgent: false, chips: [], free: '', retarget: null };
+const NOTES_DEF = ['Không hành', 'Ít cay', 'Món nóng', 'Thêm chén'];   // = lib/site.js NOTES; a live site saved before phase 2 (migrated per message) has none until re-saved
+const notes = () => App.site.notes || NOTES_DEF;   // [] = no chips on purpose; the free-text note stays
 // Send / Bỏ chọn turn the card into recall mode with its big button at the same spot: ignore that button for 1 s after.
 let sentAt = 0;
 const tableIds = () => Object.keys(App.site.points).filter(k => App.site.points[k].kind === 'table');
@@ -351,6 +394,14 @@ function receiveBtn(m, cls) {
   return `<button class="${cls}" data-act="receive" data-m="${m.id}">${cls.includes('act') ? L(t, `${m.robot} tại ${esc(pname(s.p))} · bấm để cho robot về`) : t}</button>`;
 }
 const lockWhy = m => backStop(m) ? 'Đang mang đồ về — chờ nhận lại' : 'Đang chở chén bẩn — không huỷ';
+// Handoff stops that can still move to another table: not reached yet (spec 6.9).
+function movable(m) {
+  const r = App.state.robots.find(x => x.id === m.robot) || {};
+  return m.stops.map((s, i) => [s, i]).filter(([s]) => s.a === 'handoff' && (s.status === 'pending' || (s.status === 'active' && r.phase === 'toStop')));
+}
+const rtOn = (m, i) => !!F.retarget && F.retarget.mission === m.id && F.retarget.stop === i;
+const rtBtns = m => { const ms = movable(m); return ms.map(([s, i]) =>
+  `<button class="rt" data-act="rt" data-m="${m.id}" data-s="${i}" ${press(rtOn(m, i))}>${ms.length > 1 ? 'Đổi ' + esc(short(s.p)) : 'Đổi bàn'}</button>`).join(''); };
 // Picked first, classified after: a locked newest job shows its explanation, never an older job's recall button.
 const cancelTarget = () => F.robot !== 'any' ? App.state.missions.find(m => m.robot === F.robot)
   : App.state.missions.filter(m => m.by === by()).sort((a, b) => b.createdAt - a.createdAt)[0];
@@ -358,7 +409,7 @@ const cancelTarget = () => F.robot !== 'any' ? App.state.missions.find(m => m.ro
 // Note chips + free text + urgent: holds a text input, so it only re-renders on a choice, not on every state tick.
 function renderTask() {
   $('pvOpts').innerHTML = (F.tab === 'deliver' ? `<p class="eyebrow sm">Ghi chú nhanh</p>
-    <div class="notes">${NOTES.map((n, i) => `<button class="chip" data-f="chip:${i}" ${press(F.chips.includes(n))}>${esc(n)}</button>`).join('')}</div>
+    <div class="notes">${notes().map((n, i) => `<button class="chip" data-f="chip:${i}" ${press(F.chips.includes(n))}>${esc(n)}</button>`).join('')}</div>
     <input type="text" id="note" maxlength="80" placeholder="Khác…" value="${esc(F.free)}">` : '') +
     `<label class="urg ${F.urgent ? 'on' : ''}"><input type="checkbox" id="urgent" ${F.urgent ? 'checked' : ''}><span><b>Ưu tiên gấp</b><small>lên đầu hàng chờ</small></span></label>`;
 }
@@ -373,25 +424,29 @@ function renderDesk() {
   for (const r of R) { const el = $('robots').querySelector(`[data-f="robot:${r.id}"] .bt`); if (el) el.textContent = Math.round(r.battery) + '%'; }
 
   const ms = sortMissions();
+  if (F.retarget) { const m = ms.find(x => x.id === F.retarget.mission); if (!m || !movable(m).some(([, i]) => i === F.retarget.stop)) F.retarget = null; }
   $('qhead').textContent = `Hàng chờ · ${ms.length}`;
   setHTML($('queue'), ms.map(m => {
     const [t, c] = missionStatus(m), k = 'cm-' + m.id;
     const x = arrived(m) ? receiveBtn(m, 'btn sm primary')
       : locked(m) ? `<span class="lock" title="${lockWhy(m)}">🔒</span>`
-      : `<button class="x ${isArmed(k) ? 'armed' : ''}" data-act="cancel" data-m="${m.id}" title="Huỷ lệnh" aria-label="Huỷ lệnh">${isArmed(k) ? 'Huỷ?' : '✕'}</button>`;
+      : `<span class="qa">${rtBtns(m)}<button class="x ${isArmed(k) ? 'armed' : ''}" data-act="cancel" data-m="${m.id}" title="Huỷ lệnh" aria-label="Huỷ lệnh">${isArmed(k) ? 'Huỷ?' : '✕'}</button></span>`;
     return `<li><b>${m.urgent ? '<span class="pill warn">Gấp</span>' : ''}${esc(m.label)}</b>${x}<small class="${c}">${m.robot ? m.robot + ' · ' : ''}${esc(t)}</small></li>`;
   }).join('') || '<li class="empty muted">Không có lệnh nào</li>');
 
   const sel = selected(), stations = Object.keys(P).filter(k => P[k].kind === 'station');
   setHTML($('tasks'), Object.entries(TASKS).map(([k, [vi, en]]) => `<button class="task" data-f="tab:${k}" ${press(F.tab === k)}>${L(vi, en)}</button>`).join(''));
-  setHTML($('pick'), (F.tab === 'deliver' ? `<span class="lbl">Lấy tại</span>${stations.map(s => `<button class="chip" data-f="from:${s}" ${press(F.from === s)}>${esc(P[s].name)}</button>`).join('')}`
+  const rtm = F.retarget && ms.find(x => x.id === F.retarget.mission);
+  if (rtm) setHTML($('pick'), `<span class="txt">Chạm bàn mới cho ${esc(pname(rtm.stops[F.retarget.stop].p))}</span><button class="chip" data-act="unpick">Bỏ chọn</button>`);
+  else setHTML($('pick'), (F.tab === 'deliver' ? `<span class="lbl">Lấy tại</span>${stations.map(s => `<button class="chip" data-f="from:${s}" ${press(F.from === s)}>${esc(P[s].name)}</button>`).join('')}`
     : F.tab === 'bus' ? `<span class="txt">Mang chén về ${esc(pname(S.dishPoint))}</span>` : '<span class="txt">Chọn khu hoặc bàn</span>') +
     (F.tab === 'deliver' ? `<span class="cnt">${F.tables.length} / ${S.trays} khay</span>` : '<span class="cnt vi">Chọn 1</span>'));
-  const spots = F.tab === 'summon' ? Object.keys(P).filter(k => ['station', 'dish'].includes(P[k].kind)).map(k =>
+  const spots = F.tab === 'summon' && !rtm ? Object.keys(P).filter(k => ['station', 'dish', 'entrance'].includes(P[k].kind)).map(k =>
     `<button class="tt spot" data-f="t:${k}" ${press(F.to === k)}><span class="lbl">Khu</span><b>${esc(P[k].name)}</b><span class="st">Gọi robot tới</span></button>`) : [];
   setHTML($('grid'), spots.concat(tableIds().map(t => {
     const i = sel.indexOf(t), [st, cls] = tableState(t);
-    return `<button class="tt ${cls}" data-f="t:${t}" ${press(i >= 0)}>${i >= 0 ? `<span class="tag">✓${F.tab === 'deliver' ? ' K' + (i + 1) : ''}</span>` : ''}
+    const taken = rtm && rtm.stops.some(s => s.p === t && (s.status === 'pending' || s.status === 'active'));
+    return `<button class="tt ${cls}" data-f="t:${t}" ${press(i >= 0)}${taken ? ' disabled' : ''}>${i >= 0 ? `<span class="tag">✓${F.tab === 'deliver' ? ' K' + (i + 1) : ''}</span>` : ''}
       <span class="lbl">Bàn</span><b>${esc(short(t))}</b><span class="st">${i >= 0 && F.tab === 'deliver' ? 'Khay ' + (i + 1) : esc(st)}</span></button>`;
   })).join(''));
 
@@ -412,7 +467,8 @@ function renderDesk() {
       : '<h2 class="muted">Không có lệnh để thu hồi</h2>') + (lk ? `<p class="rl">${lockWhy(tgt)}</p>` : '') + '<p class="rl small">Chọn trên lưới để tạo lệnh mới.</p>');
     // Arrived -> receive; locked (food coming back / dirty dishes on board) -> text only, no button (spec 4.2).
     setHTML($('pvSend'), !tgt || lk ? '' : arrived(tgt) ? receiveBtn(tgt, 'act primary send')
-      : `<button class="act danger send ${isArmed(k) ? 'armed' : ''}" data-act="cancel" data-m="${tgt.id}">${isArmed(k) ? L('Chạm lần nữa để thu hồi', 'Tap again to confirm') : L('Thu hồi robot', 'Recall')}</button>`);
+      : (movable(tgt).length ? `<div class="rts">${rtBtns(tgt)}</div>` : '') +
+        `<button class="act danger send ${isArmed(k) ? 'armed' : ''}" data-act="cancel" data-m="${tgt.id}">${isArmed(k) ? L('Chạm lần nữa để thu hồi', 'Tap again to confirm') : L('Thu hồi robot', 'Recall')}</button>`);
   }
 
   const K = App.state.kpi, base = K.delivered + K.timeout + K.failed;
@@ -421,8 +477,12 @@ function renderDesk() {
 function choose(kind, val) {
   if (kind === 'tab') { F.tab = val; }
   else if (kind === 'from' || kind === 'robot' || kind === 'to') F[kind] = F[kind] === val && kind === 'to' ? null : val;
-  else if (kind === 'chip') { const n = NOTES[val]; F.chips = F.chips.includes(n) ? F.chips.filter(x => x !== n) : [...F.chips, n]; }
-  else if (kind === 't') {
+  else if (kind === 'chip') { const n = notes()[val]; F.chips = F.chips.includes(n) ? F.chips.filter(x => x !== n) : [...F.chips, n]; }
+  else if (kind === 't' && F.retarget) {
+    send({ type: 'retarget', ...F.retarget, to: val, by: by() });
+    toast('Đổi bàn → ' + pname(val));
+    F.retarget = null;
+  } else if (kind === 't') {
     if (F.tab === 'deliver') {
       if (F.tables.includes(val)) F.tables = F.tables.filter(t => t !== val);
       else if (F.tables.length >= App.site.trays) toast(`Robot chỉ có ${App.site.trays} khay`, 'warn');
@@ -436,7 +496,13 @@ $('desk').addEventListener('click', e => {
   const f = e.target.closest('[data-f]');
   if (f) { const [k, v] = f.dataset.f.split(':'); return choose(k, v); }
   const act = e.target.closest('[data-act]');
-  if (act && act.dataset.act === 'unpick') { Object.assign(F, { tables: [], table: null, to: null }); sentAt = Date.now(); return choose(); }
+  if (act && act.dataset.act === 'unpick') { Object.assign(F, { tables: [], table: null, to: null, retarget: null }); sentAt = Date.now(); return choose(); }
+  if (act && act.dataset.act === 'rt') {
+    const t = { mission: +act.dataset.m, stop: +act.dataset.s };
+    F.retarget = F.retarget && F.retarget.mission === t.mission && F.retarget.stop === t.stop ? null : t;
+    Object.assign(F, { tables: [], table: null, to: null });
+    return choose();
+  }
   if (!act || act.dataset.act !== 'create') return;
   const base = { type: 'create', robot: F.robot, urgent: F.urgent, by: by() };
   if (F.tab === 'deliver') send({ ...base, kind: 'deliver', from: F.from, tables: F.tables, note: [...F.chips, F.free.trim()].filter(Boolean).join(', ') });
@@ -559,6 +625,7 @@ function stopText(s) {
   if (s.a === 'collect') return `Thu ${pname(s.p)}`;
   if (s.a === 'unload') return `Dỡ · ${pname(s.p)}`;
   if (s.a === 'return') return `Trả ${s.trays.map(t => 'K' + t.tray).join(',')} → ${pname(s.p)}`;
+  if (s.a === 'guide') return `Dẫn khách → ${pname(s.p)}`;
   return `Chờ tại ${pname(s.p)}`;
 }
 const ICON = { done: '✓ ', active: '▶ ', cancelled: '✕ ', manual: '⚠ ' };
@@ -571,7 +638,7 @@ function missionHTML(m) {
   }).join('');
   const lockedBus = m.kind === 'bus' && m.loaded;
   const k = 'cm-' + m.id;
-  return `<div class="mission ${m.urgent ? 'urgent' : ''}">
+  return `<div class="mission ${m.urgent ? 'urgent' : ''}${m.id === focusM ? ' focus' : ''}">
     <div class="mrow"><b>${esc(m.label)}</b>${m.urgent ? '<span class="pill warn">GẤP</span>' : ''}</div>
     <div class="mrow small"><span class="muted">${esc(m.by)} · <span data-ago="${m.createdAt}"></span></span><span class="pill ${tone}">${m.robot ? m.robot + ' · ' : ''}${esc(stText)}</span></div>
     ${m.note ? `<div class="small">📝 ${esc(m.note)}</div>` : ''}
@@ -614,13 +681,123 @@ function renderOps() {
     [`${k.cancelledCustomer}/${k.cancelledStaff}/${k.timeout}`, 'Huỷ KH/NV/giờ', 'Huỷ: khách/nhân viên/quá giờ'],
   ];
   setHTML($('kpi'), tiles.map(([v, l, full]) => `<div class="kpi" title="${full}"><b>${v}</b><span>${l}</span></div>`).join(''));
-  // Blocked robot (alert key blk-<robot>): the strip also offers "Đã dọn lối đi" -> the usual clear; not for noroute (same key), clearing can't fix it.
-  setHTML($('strips'), strip(App.state.alerts, a => { const r = App.state.robots.find(x => a.key === 'blk-' + x.id && x.why !== 'noroute');
-    return r ? `<button class="btn sm dark" data-act="clear" data-r="${r.id}">Đã dọn lối đi</button>` : ''; }));
+  setHTML($('strips'), strip(App.state.alerts, alertExtra));
+}
+// Guest requests (call-*, return-*) name the station that answers them; every station still sees them, marked.
+// return-*: a shortcut to that trip in Giám sát → Nhiệm vụ, where the usual recall / per-table cancel live.
+// Blocked robot (alert key blk-<robot>): "Đã dọn lối đi" -> the usual clear; not for noroute (same key), clearing can't fix it.
+function alertExtra(a) {
+  const home = role().home, r = App.state.robots.find(x => a.key === 'blk-' + x.id && x.why !== 'noroute');
+  const tag = !('station' in a) ? '' : !a.station ? '<span class="pill">Chưa có trạm nhận</span>'
+    : `<span class="pill${a.station === home ? ' go' : ''}">${home ? (a.station === home ? 'Trạm này · ' : 'Trạm khác · ') : 'Trạm nhận · '}${esc(pname(a.station))}</span>`;
+  const m = a.ref && App.state.missions.find(x => x.id === a.ref.mission);
+  const bt = a.key.startsWith('call-bill-') ? a.key.slice(10) : (App.state.bills.find(b => a.key === 'bill-claim-' + b.id) || {}).table;
+  return tag + (m ? `<button class="btn sm dark" data-act="openMission" data-m="${m.id}">Mở chuyến #${m.id}</button>` : '')
+    + (bt ? `<button class="btn sm dark" data-act="openBill" data-t="${esc(bt)}">Mở tính tiền</button>` : '')
+    + (r ? `<button class="btn sm dark" data-act="clear" data-r="${r.id}">Đã dọn lối đi</button>` : '');
 }
 
+// ---- Billing (spec §7): staff check every receivable at the restaurant's own source, then prepare the bill the robot
+// shows. Robot order totals are only a reference. Every transition sends bill id + rev + requestId; ack never settles.
+const B = { table: null, v: {}, reason: {}, method: {}, key: null };   // chosen table; typed values per table / bill, kept over refusals
+const BSTATUS = { prepared: ['Đã chuẩn bị · chờ thanh toán', 'go'], claimed: ['Khách báo đã chuyển khoản', 'warn'], settled: ['Đã thu · chờ đóng lượt', 'ok'] };
+const METHOD = { transfer: 'Chuyển khoản', cash: 'Tiền mặt', card: 'Thẻ', zero: '0đ' };
+const billOf = t => App.state.bills.find(b => b.table === t);   // one open bill per table (server)
+const ordersOf = t => App.state.orders.filter(o => o.table === t);
+const billAlerts = t => { const b = billOf(t); return App.state.alerts.filter(a => a.key === 'call-bill-' + t || (b && a.key === 'bill-claim-' + b.id)); };
+const billTables = () => [...new Set([...tableIds(), ...App.state.orders.map(o => o.table), ...App.state.bills.map(b => b.table)])]
+  .filter(t => ordersOf(t).length || billOf(t) || billAlerts(t).length);
+const vndIn = s => { const d = String(s || '').replace(/[\s.,đ]/gi, ''); return /^\d+$/.test(d) && Number.isSafeInteger(+d) ? +d : null; };
+const itemName = id => ((App.site.menu || {}).items || []).find(i => i.id === id) || { vi: id };
+function billHTML(b) {
+  const [txt, tone] = BSTATUS[b.status];
+  return `<div class="card"><p class="eyebrow sm">Phiếu #${b.id} · <span class="pill ${tone}">${txt}</span></p><div class="bsum">${vnd(b.total)}</div>
+    <p class="small">${b.total !== b.suggested ? `Tham khảo ${vnd(b.suggested)}` : 'Bằng tổng tham khảo'} · ${b.orderIds.length} đơn${b.note ? ' · Ghi chú: ' + esc(b.note) : ''}</p>
+    <p class="small muted">Chuẩn bị: ${esc(b.preparedBy)} ${clock(b.preparedAt)}${b.claimedAt ? ` · Khách báo trả ${clock(b.claimedAt)}` : ''}${b.settledAt ? ` · Thu: ${esc(b.settledBy)} ${clock(b.settledAt)} · ${METHOD[b.method]}` : ''}</p></div>`;
+}
+// Inputs live in #bForm, rebuilt only when the table / bill state changes, so a state tick never eats what staff type.
+function renderBill() {
+  if (!App.state) return;
+  for (const b of App.state.bills) delete B.v[b.table];   // a bill exists (from any station): the next party never inherits this draft
+  if ($('bill').hidden) return;
+  const list = billTables();
+  setHTML($('blist'), `<p class="eyebrow sm">Bàn cần tính tiền · ${list.length}</p>` + (list.map(t => {
+    const b = billOf(t), os = ordersOf(t), n = billAlerts(t).length;
+    const [txt, tone] = b ? BSTATUS[b.status] : n ? ['Yêu cầu tính tiền', 'warn'] : [`${os.length} đơn chưa tính tiền`, ''];
+    return `<button class="rbtn" data-act="bPick" data-t="${esc(t)}" ${press(B.table === t)}><i style="background:${TONE[tone] || 'var(--line)'}"></i><b>${esc(pname(t))}</b>
+      <span class="bt">${vnd(b ? b.total : os.reduce((a, o) => a + o.total, 0))}</span><small>${esc(txt)}${n ? ' · ' + n + ' yêu cầu' : ''}</small></button>`;
+  }).join('') || '<p class="empty">Không có bàn nào cần tính tiền</p>')   // a table that ordered only outside the robot: picked here
+    + `<select id="bOther" aria-label="Bàn khác"><option value="">Bàn khác (không có đơn robot)…</option>${tableIds().filter(t => !list.includes(t)).map(t => `<option value="${esc(t)}" ${t === B.table ? 'selected' : ''}>${esc(pname(t))}</option>`).join('')}</select>`);
+  const t = B.table;
+  if (!t) { setHTML($('bHead'), '<p class="empty">Chọn bàn trong danh sách để chuẩn bị phiếu hoặc xác nhận thu tiền.</p>'); B.key = ''; $('bForm').innerHTML = ''; setHTML($('bActs'), ''); return; }
+  const b = billOf(t), os = ordersOf(t), ref = os.reduce((a, o) => a + o.total, 0), ids = JSON.stringify(os.map(o => o.id)), [where, here] = tableState(t);
+  const ours = q => q.type.startsWith('bill') && (q.table === t || (!!b && q.bill === b.id)), busy = sending(ours), wait = type => sending(q => ours(q) && q.type === type);
+  const v = b ? null : B.v[t] ||= { total: '', note: '', ok: false, ids };   // the prepare draft, only while the table has no bill
+  if (v && v.ids !== ids) Object.assign(v, { ok: false, ids });   // the orders changed: check them again
+  const rows = os.map(o => `<tr class="oh"><td>Đơn #${esc(o.id)}${o.t ? ' · ' + clock(o.t) : ''}${o.status === 'paid-claimed' ? ' <span class="pill warn">chưa xác minh</span>' : ''}${b && !b.orderIds.includes(o.id) ? ' <span class="pill danger">ngoài phiếu</span>' : ''}</td><td>${vnd(o.total)}</td></tr>`
+    + (o.items || []).map(x => `<tr><td>${esc(itemName(x.id).vi)} ×${x.qty} · ${vnd(x.price)}</td><td>${vnd(x.qty * x.price)}</td></tr>`).join('')).join('');
+  const m = b && (b.total ? B.method[b.id] : 'zero');
+  setHTML($('bHead'), `<div class="brow"><h2>${esc(pname(t))}</h2>${here ? `<span class="pill ${here === 'here' ? 'ok' : 'warn'}">${esc(where)}</span>` : ''}</div>`
+    + billAlerts(t).map(a => `<div class="brow breq"><span class="grow">${esc(a.text)}</span><button class="btn sm dark" data-act="ack" data-id="${a.id}">Đã nhận yêu cầu</button></div>`).join('')
+    + `<p class="eyebrow sm">Đơn robot chưa đóng · ${os.length}</p>`
+    + (os.length ? `<table class="btab">${rows}<tr class="tot"><td>Tổng tham khảo từ đơn robot</td><td>${vnd(ref)}</td></tr></table>` : b ? '' : '<p class="small muted">Bàn không có đơn robot — nhập tổng đã đối chiếu và ghi rõ nguồn.</p>')
+    + (b ? billHTML(b) : '')
+    + (b && b.status !== 'settled' ? (b.total ? `<div class="brow">${['transfer', 'cash', 'card'].map(x => `<button class="chip" data-act="bMethod" data-b="${b.id}" data-v="${x}" ${press(m === x)}>${METHOD[x]}</button>`).join('')}</div>` : '<p class="small">Phiếu 0đ — xác nhận tại trạm, khách không chuyển khoản.</p>')
+      + `<button class="act primary" data-act="bSettle" data-b="${b.id}" ${!m || busy ? 'disabled' : ''}>${wait('billSettle') ? L('Đang gửi…', '')
+        : isArmed('bSettle-' + b.id) ? L('Chạm lần nữa để xác nhận', `Đã thu ${vnd(b.total)} · ${METHOD[m]}`) : L('Xác nhận đã thu tiền', m ? 'Đã kiểm tra giao dịch / tiền mặt / thẻ' : 'Chọn cách khách đã trả')}</button>` : '')
+    + (b && b.status === 'settled' ? `<button class="act primary" data-act="bClose" data-b="${b.id}" ${busy ? 'disabled' : ''}>${wait('billClose') ? L('Đang gửi…', '')
+      : isArmed('bClose-' + b.id) ? L('Chạm lần nữa để đóng lượt', `Đóng ${b.orderIds.length} đơn trong phiếu #${b.id}`) : L('Đóng lượt tính tiền', `Đóng ${b.orderIds.length} đơn trong phiếu #${b.id}`)}</button>` : ''));
+
+  const fk = !b ? 'p|' + t + '|' + ids : b.status === 'settled' ? '' : 'v|' + b.id + '|' + b.status;
+  if (fk !== B.key) {
+    B.key = fk;
+    $('bForm').innerHTML = !b ? `<div class="field"><label for="bTotal">Tổng phải thu đã đối chiếu (VND)</label><input type="text" inputmode="numeric" id="bTotal" maxlength="15" value="${esc(v.total)}" placeholder="Tham khảo ${vnd(ref)}"></div>
+      <div class="field"><label for="bNote">Ghi chú · nguồn đã đối chiếu</label><input type="text" id="bNote" maxlength="200" value="${esc(v.note)}" placeholder="VD: gồm 2 bia gọi tại quầy"></div>
+      <label class="urg"><input type="checkbox" id="bOk" ${v.ok ? 'checked' : ''}><span><b>Đã đối chiếu toàn bộ khoản phải thu</b><small>gồm món gọi ngoài robot, giảm giá, phụ thu</small></span></label>`
+      : !fk ? '' : (b.status === 'claimed' ? '<p class="bwarn">Khách đã báo chuyển khoản — kiểm tra giao dịch trước khi tạo phiếu mới</p>' : '')
+        + `<div class="field"><label for="bReason">Lý do vô hiệu hóa phiếu</label><input type="text" id="bReason" data-b="${b.id}" maxlength="200" value="${esc(B.reason[b.id] || '')}" placeholder="VD: khách gọi thêm món"></div>`;
+  }
+  if (!b) {
+    const total = vndIn(v.total), note = v.note.trim();
+    const why = total === null ? 'Nhập tổng phải thu (số nguyên VND ≥ 0)'
+      : (total !== ref || !os.length) && !note ? (os.length ? 'Tổng khác tổng tham khảo — cần ghi chú lý do' : 'Bàn không có đơn robot — cần ghi rõ nguồn đã đối chiếu')
+      : !v.ok ? 'Đánh dấu “Đã đối chiếu toàn bộ khoản phải thu”' : '';
+    setHTML($('bActs'), (why ? `<p class="small muted">${why}</p>` : '') + `<button class="act primary" data-act="bPrepare" data-t="${esc(t)}" data-ids="${esc(ids)}" ${why || busy ? 'disabled' : ''}>${wait('billPrepare') ? L('Đang gửi…', '')
+      : L(total === null ? 'Chuẩn bị phiếu' : 'Chuẩn bị phiếu · ' + vnd(total), 'Robot hiện QR theo đúng tổng này')}</button>`);
+  } else setHTML($('bActs'), b.status === 'settled' ? '' : `<button class="act danger" data-act="bVoid" data-b="${b.id}" ${!(B.reason[b.id] || '').trim() || busy ? 'disabled' : ''}>${wait('billVoid') ? L('Đang gửi…', '')
+    : isArmed('bVoid-' + b.id) ? L('Chạm lần nữa để vô hiệu hóa', b.status === 'claimed' ? 'Đã kiểm tra giao dịch của khách' : 'Không đóng / xoá đơn') : L('Vô hiệu hóa phiếu', 'Cần lý do · không đóng / xoá đơn')}</button>`);
+}
+const billDone = rep => { if (rep.ok) toast(rep.text); renderBill(); };   // refusals: settle() toasts the server text; the view follows state
+$('bill').addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'), a = el && el.dataset.act;
+  if (a === 'bPick') { B.table = el.dataset.t; renderBill(); }
+  if (a === 'bMethod') { B.method[+el.dataset.b] = el.dataset.v; renderBill(); }
+  if (a === 'bPrepare') {   // orderIds exactly as rendered; reconnect resends the identical payload (same requestId)
+    const t = el.dataset.t, v = B.v[t];
+    request({ type: 'billPrepare', table: t, orderIds: JSON.parse(el.dataset.ids), total: vndIn(v.total), note: v.note.trim(), by: by() }, null, billDone, true);
+    renderBill();
+  }
+  if (['bSettle', 'bClose', 'bVoid'].includes(a)) {
+    const b = App.state.bills.find(x => x.id === +el.dataset.b);
+    if (!b) return;
+    const msg = { type: { bSettle: 'billSettle', bClose: 'billClose', bVoid: 'billVoid' }[a], bill: b.id, rev: b.rev, by: by() };
+    if (a === 'bSettle') msg.method = b.total ? B.method[b.id] : 'zero';
+    if (a === 'bVoid') msg.reason = B.reason[b.id].trim();
+    armed(a + '-' + b.id, () => request(msg, null, rep => { if (rep.ok && a === 'bClose' && B.table === b.table) B.table = null; billDone(rep); }, true), renderBill);
+  }
+});
+$('bill').addEventListener('input', e => {
+  const v = B.v[B.table], id = e.target.id;
+  if (id === 'bOther') B.table = e.target.value || null;
+  if (id === 'bTotal') v.total = e.target.value;
+  if (id === 'bNote') v.note = e.target.value;
+  if (id === 'bOk') v.ok = e.target.checked;
+  if (id === 'bReason') B.reason[+e.target.dataset.b] = e.target.value;
+  renderBill();
+});
+
 // ---- Side panel: one tab at a time; render() fills only the active one ----
-let PTAB = 'fleet', SIMR = null;
+let PTAB = 'fleet', SIMR = null, focusM = null;   // focusM: trip opened from a return-* alert
 const PTABS = { fleet: 'Đội robot', missions: 'Nhiệm vụ', log: 'Nhật ký', sim: 'Mô phỏng' };
 const SIMS = [['block', 'Vật cản trước robot', 'Đặt ghế trên lối đi ngay trước robot'], ['clear', 'Gỡ vật cản quanh robot', ''],
   ['offline', 'Mất kết nối', ''], ['online', 'Kết nối lại', ''], ['lowbat', 'Pin yếu', '']];
@@ -660,7 +837,7 @@ $('pbody').addEventListener('click', e => { const b = e.target.closest('[data-si
 
 function render() {
   if (!App.state) return;
-  renderPanel(); renderOps(); renderMap(); renderDesk();
+  renderPanel(); renderOps(); renderMap(); renderDesk(); renderBill();
 }
 
 document.body.addEventListener('click', e => {
@@ -677,6 +854,12 @@ document.body.addEventListener('click', e => {
   if (a === 'estop') send({ type: 'estop', robot: SIMR, by: by() });
   if (a === 'obClear') send({ type: 'obstacle', remove: 'all', by: by() });
   if (a === 'reset') armed('reset', () => send({ type: 'reset', by: by() }), renderPanel);
+  if (a === 'openMission') {
+    focusM = m; PTAB = 'missions'; setView('mon'); renderPanel();
+    const el = $('pbody').querySelector('.mission.focus');
+    if (el) el.scrollIntoView({ block: 'nearest' });
+  }
+  if (a === 'openBill') { B.table = b.dataset.t; setView('bill'); }
 });
 
 // Station hears cues for its own location; alerts go to everyone.
@@ -690,6 +873,7 @@ connect(m => {
     return;
   }
   if (m.type === 'state' || m.type === 'map') render();
+  if (m.type === 'event' && m.reply && !m.settled && m.ok !== true) toast(m.text, 'warn');   // refusal sent to this screen only (retarget has no ok field)
   if (m.type === 'event' && m.stationSound && hears(m)) {
     play(m.stationSound);
     toast(m.text, m.stationSound === 'alert' ? 'error' : m.stationSound === 'cancelled' ? 'warn' : 'info');

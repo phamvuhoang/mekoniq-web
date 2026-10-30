@@ -121,7 +121,7 @@ function drive(sim, site, id, b, dt, events) {
   if (['wait', 'queue', 'stuck', 'yield'].includes(b.nav)) { b.nav = 'go'; b.why = null; }
 
   const slowAhead = ahead ? Math.max(0.35, (ahead.d - STOP) / (SENSE - STOP)) : 1;
-  let step = S.speed * dt * slowAhead, moved = false;
+  let step = S.speed * (b.factor || 1) * dt * slowAhead, moved = false;
   while (step > 1e-6 && b.path.length) {
     const nxt = b.path[0], to = node(sim, nxt), e = R.edgeOf(sim.map, b.prev, nxt);
     const left = d2(b, to);
@@ -163,6 +163,7 @@ function handle(sim, site, input, now) {
       b.goal = { node: input.to, token: input.token }; b.avoid = [];
       replan(sim, input.robot, b);
       return [];
+    case 'speed': if (b) b.factor = Math.max(0.25, Math.min(1, +input.factor || 1)); return [];   // guide slow mode
     case 'stop': if (b) b.stopped = true; return [];
     case 'resume': if (b) b.stopped = false; return [];
     case 'map':   // new route network from the fleet manager: every moving robot replans

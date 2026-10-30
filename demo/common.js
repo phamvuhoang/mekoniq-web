@@ -1,5 +1,5 @@
 // Shared by station / robot / table pages: messaging (via transport.js), MP3 cues, labels, small UI helpers.
-const App = { site: null, state: null, map: null, skew: 0 };
+const App = { site: null, state: null, map: null, skew: 0, migrated: false, lang: 'vi' };   // migrated: the live site is still in the pre-v2 format; lang: vi | en | both (robot)
 // ?orient=portrait forces the portrait layout (screenshot aid); CSS mirrors the orientation media query under :root[data-orient=portrait].
 if (new URLSearchParams(location.search).get('orient') === 'portrait') document.documentElement.dataset.orient = 'portrait';
 
@@ -8,17 +8,49 @@ function connect(onMsg) {
   Transport.connect(raw => {
     let m;
     try { m = JSON.parse(raw); } catch (err) { return; }
-    if (m.type === 'site') App.site = m.site;
+    if (m.type === 'site') { App.site = m.site; App.migrated = !!m.migrated; }
     if (m.type === 'map') App.map = m.map;
     if (m.type === 'state') { App.state = m; App.skew = Date.now() - m.now; }
+    if (m.type === 'event' && m.reply) m.settled = settle(m);
     if (App.site) onMsg(m);
   }, up => {
     if (off) off.hidden = up;
     if (dot) dot.classList.toggle('on', up);
-    if (up) send({ type: 'hello' });
+    if (up) { send({ type: 'hello' }); for (const q of reqs.values()) if (q.retry) send(q.msg); }
   });
 }
 function send(obj) { Transport.send(JSON.stringify(obj)); }
+
+// Guest requests (spec §6): pending until the server's reply event with the same requestId, so nothing is toasted as
+// sent before the server took it. ok = [vi, en] success text; done(reply) runs on ok, refusal or timeout.
+// retry: the server keeps receipts, so a reconnect sends the same request (same requestId) again; a new tap is a new request
+// unless msg already carries the requestId of the earlier try (robot order: the same cart after a timeout).
+const REPLY_MS = 10000, reqs = new Map();
+function request(msg, ok, done = () => {}, retry = false) {
+  const id = msg.requestId ||= Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  reqs.set(id, { msg, ok, done, retry, timer: setTimeout(() => settle({ requestId: id, ok: false, code: 'timeout' }), REPLY_MS) });
+  send(msg);
+  return id;
+}
+function settle(m) {
+  const q = reqs.get(m.requestId);
+  if (!q) return false;
+  clearTimeout(q.timer); reqs.delete(m.requestId);
+  if (!m.ok) toast(refusal(m), 'warn');
+  else if (q.ok) toast(say(...q.ok));   // duplicate = an earlier send of this request got through
+  q.done(m);
+  return true;
+}
+const forget = id => { const q = reqs.get(id); if (q) { clearTimeout(q.timer); reqs.delete(id); } };   // the state already shows the outcome
+const sending = test => [...reqs.values()].some(q => test(q.msg));
+const say = (vi, en) => App.lang === 'en' ? en : App.lang === 'both' ? vi + ' · ' + en : vi;
+// Server refusals are Vietnamese; guests reading English get a line per code.
+const REFUSED_EN = { disabled: 'This service is turned off', 'not-ready': 'This service is not set up yet', stale: 'This has changed — showing the latest',
+  policy: 'Please use “Wrong item / Need help”', billing: 'Your bill is being prepared — please ask staff', unreachable: 'The robot cannot reach that table yet',
+  unsupported: 'This robot cannot change speed', invalid: 'Please check your choice and try again', reload: 'Please reload this page',
+  status: 'This bill was already handled — please ask staff' };
+const refusal = m => m.code === 'timeout' ? say('Chưa nhận được xác nhận — vui lòng thử lại', 'No confirmation yet — please try again')
+  : say(m.text || 'Chưa gửi được', REFUSED_EN[m.code] || 'Not sent — please ask staff');
 
 // Browsers block autoplay until a user tap, so audio is unlocked from a click handler.
 const SOUNDS = ['excuse', 'arrived', 'remind', 'thanks', 'load', 'collect', 'unload', 'cancel', 'estop', 'blocked', 'standby', 'alert', 'cancelled', 'ding'];
@@ -41,11 +73,13 @@ const short = id => pname(id).replace('Bàn ', '');
 const serverNow = () => Date.now() - App.skew;
 const ago = t => { const s = Math.max(0, Math.round((serverNow() - t) / 1000)); return s < 60 ? s + ' giây' : Math.floor(s / 60) + ' phút'; };
 const clock = t => new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-const ACTION_VI = { load: 'Xếp đồ lên khay', handoff: 'Giao cho khách', collect: 'Thu chén đĩa', unload: 'Dỡ chén đĩa', return: 'Trả đồ bị huỷ', standby: 'Chờ lệnh' };
+const ACTION_VI = { load: 'Xếp đồ lên khay', handoff: 'Giao cho khách', collect: 'Thu chén đĩa', unload: 'Dỡ chén đĩa', return: 'Trả đồ bị huỷ', standby: 'Chờ lệnh', guide: 'Dẫn khách' };
 
 function missionOf(r) { return r && r.mission ? App.state.missions.find(m => m.id === r.mission) : null; }
-const etaSec = r => Math.round((r.rem || 0) / ((App.site.sim || {}).speed || 1));   // remaining route length, not straight line
+const etaSec = r => Math.round((r.rem || 0) / ((App.site.sim || {}).speed || 1) / (r.slow || 1));   // remaining route length, not straight line
 // Simulator robots drive on the hand-drawn floor plan (web demo); a Valetudo-only site shows the robot's own map instead.
+const vnd = n => String(n).replace(/\B(?=(\d{3})+$)/g, '.') + 'đ';
+const feat = f => !!App.site && FeaturePolicy.readiness(App.site, f, App.map).effective;   // flag on and config ready (lib/feature-policy.js, spec §5)
 const hasSim = () => !!App.site && App.site.robots.some(r => !r.driver || r.driver === 'sim');
 // [text, tone] for a robot's current status.
 function robotStatus(r) {
@@ -104,7 +138,7 @@ function startClock() {
 }
 // Alert strip rows (one per alert). extra(a) may return more button HTML placed before "Đã biết".
 function strip(alerts, extra) {
-  return (alerts || []).map(a => `<div class="strip${a.level === 'error' ? ' error' : ''}"><span class="kind">${a.level === 'error' ? 'Lỗi' : 'Cảnh báo'}</span><span class="grow">${esc(a.text)}</span><span class="t">${clock(a.t)}</span>${extra ? extra(a) : ''}<button class="btn sm dark" data-act="ack" data-id="${esc(a.id)}">Đã biết</button></div>`).join('');
+  return (alerts || []).map(a => `<div class="strip${a.level === 'error' ? ' error' : ''}"><span class="kind">${a.level === 'error' ? 'Lỗi' : 'Cảnh báo'}</span><span class="grow">${esc(a.text)}</span><span class="t">${clock(a.t)}</span>${extra ? extra(a) : ''}<button class="btn sm dark" data-act="ack" data-id="${esc(a.id)}">Đã biết</button></div>`).join('');   // ack only hides the alert: orders and bills stay (spec §6)
 }
 // What a table tile shows: robot standing there, robot on its way, queued, or free.
 function tableState(t) {

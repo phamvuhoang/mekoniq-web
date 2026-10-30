@@ -18,9 +18,11 @@ const Transport = (() => {
   }
 
   async function lead() {
-    const route = await load('lib/route.js'), siteLib = await load('lib/site.js');
-    const [O, S, seed] = await Promise.all([load('lib/orchestrator.js', { './route': route, './site': siteLib }), load('lib/simulator.js', { './route': route }),
-      fetch('site.json').then(r => r.json())]);
+    const route = await load('lib/route.js'), policy = await load('lib/feature-policy.js');
+    const siteLib = await load('lib/site.js', { './feature-policy': policy }), billing = await load('lib/billing.js');
+    const [O, S, seed] = await Promise.all([
+      load('lib/orchestrator.js', { './route': route, './site': siteLib, './feature-policy': policy, './billing': billing }),
+      load('lib/simulator.js', { './route': route }), fetch('site.json').then(r => r.json())]);
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
     // seed = this deploy's site.json (siteReset target); custom = what setup.html saved, like global.site || seed on Node-RED.
@@ -42,9 +44,15 @@ const Transport = (() => {
       }
     };
     const run = inp => {
-      // "Xoá dữ liệu demo" also drops the saved config: back to site.json before the orchestrator rebuilds its state.
-      if (custom && inp.source === 'ui' && inp.data && inp.data.type === 'reset') { custom = null; site = seed; deliver([{ payload: JSON.stringify({ type: 'site', site }) }]); }
-      const r = O.handle(st, site, inp, Date.now());
+      let r = O.handle(st, site, inp, Date.now());
+      // "Xoá dữ liệu demo" also drops the saved config once the orchestrator took the reset (it refuses while a bill is
+      // open): back to site.json, and the state rebuilt once more on it (robots, route map).
+      if (custom && r.cmds.some(c => c.cmd === 'reset')) {
+        deliver(r.ui);
+        custom = null; site = seed;
+        deliver([{ payload: JSON.stringify({ type: 'site', site }) }]);
+        r = O.handle(st, site, inp, Date.now());
+      }
       if (r.site) { site = custom = r.site; save(); }   // config saved from setup.html
       deliver(r.ui);
       for (const cmd of r.cmds) for (const e of S.handle(sim, site, cmd, Date.now())) run({ source: 'adapter', data: e });
