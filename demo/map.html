@@ -125,7 +125,7 @@ let BY = 'Quản lý ca';
 try { const s = JSON.parse(localStorage.getItem('mekoniq.station')); if (s && s.name) BY = s.name; } catch (e) {}
 
 // Draft = the map being edited; it only reaches robots on "Áp dụng".
-let D = null, dirty = false, tool = 'select', sel = null, from = null, drag = null, newer = false, grabbed = false;
+let D = null, dirty = false, tool = 'select', sel = null, from = null, drag = null, newer = false, grabbed = false, baseV = 0;
 const TOOLS = {
   select: ['Chọn & kéo', 'Kéo điểm để đổi vị trí. Chạm một lối đi để đặt một chiều, lối hẹp, đi chậm, đóng lối. Phím Delete xoá mục đang chọn.'],
   add: ['Thêm điểm', 'Chạm lên một lối đi để chèn điểm uốn (rồi kéo để bẻ cong lối đi). Chạm chỗ trống để thêm điểm mới, sau đó nối nó vào lối đi.'],
@@ -135,7 +135,7 @@ const name = id => App.site.points[id] ? App.site.points[id].name
   : id[0] === 'j' && App.site.points[id.slice(1)] ? 'Lối ' + App.site.points[id.slice(1)].name : 'Điểm ' + id;
 const copy = m => JSON.parse(JSON.stringify({ nodes: m.nodes, edges: m.edges }));
 
-function load(m) { D = copy(m); dirty = false; newer = false; sel = null; from = null; draw(); }
+function load(m) { D = copy(m); baseV = m.v; dirty = false; newer = false; sel = null; from = null; draw(); }
 function change() { dirty = true; draw(); }
 
 function draw() {
@@ -188,7 +188,7 @@ function check() {
   const rows = [];
   if (!bad.length) rows.push('<div class="good">✓ Mọi bàn, trạm và chỗ sạc đều có đường tới</div>');
   else rows.push(`<div class="bad">⚠ Robot không tới được: ${bad.map(p => esc(name(p))).join(', ')}</div>`);
-  if (loose.length) rows.push(`<div>Điểm chưa nối lối đi nào: ${loose.join(', ')}</div>`);
+  if (loose.length) rows.push(`<div>Điểm chưa nối lối đi nào: ${loose.map(esc).join(', ')}</div>`);
   const closed = D.edges.filter(e => e.closed).length;
   if (closed) rows.push(`<div>${closed} lối đang đóng</div>`);
   setHTML($('check'), rows.join(''));
@@ -221,6 +221,7 @@ function del() {
 
 svg.addEventListener('pointerdown', e => {
   const n = e.target.closest('[data-node]');
+  grabbed = false;   // a touch drag ends without a click: it must not swallow this tap
   if (tool !== 'select' || !n) return;
   sel = { node: n.dataset.node }; drag = { id: n.dataset.node, moved: false }; grabbed = true;
   svg.setPointerCapture(e.pointerId);
@@ -234,7 +235,7 @@ svg.addEventListener('pointermove', e => {
   D.nodes[drag.id] = p; drag.moved = true; dirty = true;
   draw();
 });
-svg.addEventListener('pointerup', () => { drag = null; });
+['pointerup', 'pointercancel'].forEach(t => svg.addEventListener(t, () => { drag = null; }));
 svg.addEventListener('click', e => {
   const n = e.target.closest('[data-node]'), ed = e.target.closest('[data-edge]'), p = svgPoint(svg, e);
   if (grabbed) { grabbed = false; return; }   // node picked / dragged on pointerdown
@@ -277,20 +278,23 @@ addEventListener('keydown', e => {
 });
 addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });
 
+// send() drops a message while disconnected: say so instead of pretending it went out.
+function isOffline() { if ($('offline').hidden) return false; toast('Mất kết nối — chưa gửi được', 'error'); return true; }
 $('apply').onclick = () => {
+  if (isOffline()) return;
   dirty = false; newer = false; draw();   // before send: the demo transport echoes the map synchronously
   send({ type: 'map', map: D, by: BY });
   toast('Đã áp dụng lộ trình — robot đang chạy tự tính lại đường');
 };
 $('revert').onclick = () => App.map && load(App.map);
-$('defaults').onclick = e => armed('defaults', () => send({ type: 'mapReset', by: BY }), () => {
+$('defaults').onclick = e => armed('defaults', () => { if (isOffline()) return; dirty = false; send({ type: 'mapReset', by: BY }); }, () => {   // the draft gives way to the defaults
   $('defaults').textContent = isArmed('defaults') ? 'Chạm lần nữa để khôi phục' : 'Khôi phục mặc định';
   $('defaults').classList.toggle('armed', isArmed('defaults'));
 });
 
 connect(m => {
   if (m.type === 'site') $('legend').innerHTML = LEGEND;
-  if (m.type === 'map') { if (!dirty) load(m.map); else { newer = true; draw(); } }
+  if (m.type === 'map') { if (!dirty) load(m.map); else if (m.map.v !== baseV) { newer = true; draw(); } }   // same v = the hello after a reconnect
   if (m.type === 'state') drawRobots();
 });
 </script>

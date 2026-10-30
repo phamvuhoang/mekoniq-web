@@ -431,10 +431,11 @@ function saveSite(c, d, session, seed, by) {
   if (!reset && (!d.site || Number(d.site.rev) !== (c.site.rev || 0))) return fail('máy khác vừa lưu cấu hình — tải lại trang');
   const { site, errors } = Site.normalize(reset ? seed : d.site, seed);
   if (errors.length) return fail(errors.join('; '));
+  if (site.map) { site.map = site.floor && R.clean(site.map, site); if (!site.map) return fail('lộ trình không hợp lệ'); }   // same check as an edit from map.html
   const used = Site.inUse(c.site, c.st);
   const gone = [...used.points].filter(p => !site.points[p]).map(p => pname(c, p)).concat([...used.robots].filter(id => !site.robots.some(r => r.id === id)));
   if (gone.length) return fail(gone.join(', ') + ' đang có lệnh');
-  site.rev = (c.site.rev || 0) + 1;
+  site.rev = (c.site.rev || 0) + 1; site.by = by; site.savedAt = c.now; site.saveRequestId = String(d.requestId || '').slice(0, 100);   // setup.html Sao lưu: "Lưu lần cuối bởi … lúc …"
   c.site = c.newSite = site;
   sync(c.st, site, c.now);
   log(c, 'info', `${by} ${reset ? 'khôi phục cấu hình mặc định' : 'cập nhật cấu hình'} (bản ${site.rev})`);

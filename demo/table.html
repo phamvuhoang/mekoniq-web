@@ -53,18 +53,18 @@ const DICT = {
   vi: { brand: 'Serve S1 · Khách hàng', eyebrow: 'Theo dõi món của bạn', table: t => 'Bàn ' + t, food: 'Món ăn', drink: 'Đồ uống', tray: 'khay',
     help: 'Bạn có thể huỷ món đang trên đường tới. Nếu món đã lên khay, robot sẽ mang món về lại bếp/quầy. Cần hỗ trợ khác, vui lòng gọi nhân viên.',
     empty: 'Chưa có món nào đang tới bàn của bạn.', offline: 'Mất kết nối — đang kết nối lại…',
-    done: () => 'Đã nhận · chúc ngon miệng', mine: () => 'Bạn đã huỷ món này', cancelled: () => 'Món đã được huỷ', queued: () => 'Đang chờ robot',
+    manual: () => 'Nhân viên sẽ mang món tới bàn', done: () => 'Đã nhận · chúc ngon miệng', mine: () => 'Bạn đã huỷ món này', cancelled: () => 'Món đã được huỷ', queued: () => 'Đang chờ robot',
     prep: p => `${p.place} đang chuẩn bị · robot ${p.robot} tới lấy`, here: p => `Robot ${p.robot} đã tới bàn — mời lấy món ở khay ${p.tray}`,
-    coming: p => `Robot ${p.robot} đang tới · ${p.eta ? `khoảng ${p.eta} giây` : 'sắp tới'}`, other: p => `Robot ${p.robot} đang giao bàn khác trước, sau đó tới bàn bạn`,
+    coming: p => `Robot ${p.robot} đang tới bàn bạn`, other: p => `Robot ${p.robot} đang giao bàn khác trước, sau đó tới bàn bạn`,
     paused: ' (robot đang tạm dừng)', cancel: 'Huỷ món này', sure: 'Chạm lần nữa để huỷ món',
     order: 'Đơn', orderNew: 'Bếp đã nhận · đang chuẩn bị', orderPaid: 'Đã báo chuyển khoản · chờ nhân viên xác nhận', total: 'Tổng',
     staff: 'Gọi nhân viên', bill: 'Xin hoá đơn', staffOk: 'Đã gọi nhân viên — vui lòng chờ', billOk: 'Đã xin hoá đơn — nhân viên sẽ mang tới', moved: t => `Món này của ${t} — bếp đã sửa nhầm bàn` },
   en: { brand: 'Serve S1 · Guest', eyebrow: 'Track your order', table: t => 'Table ' + t, food: 'Food', drink: 'Drinks', tray: 'tray',
     help: 'You can cancel an item on its way. If it is already on a tray, the robot takes it back to the kitchen/bar. For anything else, please call staff.',
     empty: 'Nothing on its way to your table yet.', offline: 'Connection lost — reconnecting…',
-    done: () => 'Received · enjoy your meal', mine: () => 'You cancelled this item', cancelled: () => 'This item was cancelled', queued: () => 'Waiting for a robot',
+    manual: () => 'Staff will bring your food to the table', done: () => 'Received · enjoy your meal', mine: () => 'You cancelled this item', cancelled: () => 'This item was cancelled', queued: () => 'Waiting for a robot',
     prep: p => `${p.place} is preparing · robot ${p.robot} picks it up`, here: p => `Robot ${p.robot} is at your table — please take tray ${p.tray}`,
-    coming: p => `Robot ${p.robot} on the way · ${p.eta ? `about ${p.eta} s` : 'arriving'}`, other: p => `Robot ${p.robot} serves another table first, then yours`,
+    coming: p => `Robot ${p.robot} is on the way to your table`, other: p => `Robot ${p.robot} serves another table first, then yours`,
     paused: ' (robot paused)', cancel: 'Cancel this item', sure: 'Tap again to cancel',
     order: 'Order', orderNew: 'Kitchen received · preparing', orderPaid: 'Payment reported · waiting for staff', total: 'Total',
     staff: 'Call staff', bill: 'Request bill', staffOk: 'Staff called — please wait', billOk: 'Bill requested — staff will bring it', moved: t => `This item was for ${t} — the kitchen fixed a mix-up` },
@@ -77,11 +77,12 @@ const tr = k => DICT[lang][k];
 function status(m, i, s, r) {
   const open = s.status === 'pending' || s.status === 'active';
   if (s.status === 'done') return ['done', {}, 4, 'ok'];
+  if (s.status === 'manual') return ['manual', {}, 3, ''];
   if (!open) return [s.why === 'customer' ? 'mine' : 'cancelled', {}, 0, 'cancel'];
   if (m.status === 'queued') return ['queued', {}, 1, ''];
   if (!m.loaded) return ['prep', { place: pname(m.stops[0].p), robot: m.robot }, 2, ''];
   if (m.cur === i && r.phase === 'atStop') return ['here', { robot: m.robot, tray: s.tray }, 4, 'ok'];
-  if (m.cur === i) return ['coming', { robot: m.robot, eta: etaSec(r) }, 3, ''];
+  if (m.cur === i) return ['coming', { robot: m.robot }, 3, ''];
   return ['other', { robot: m.robot }, 3, ''];
 }
 function item(m, i, s) {
@@ -94,7 +95,7 @@ function item(m, i, s) {
   return `<div class="card item">
     <div class="row"><b>${what} #${m.id}${s.tray ? ` · ${tr('tray')} ${s.tray}` : ''}</b><span class="small muted">${clock(m.createdAt)}</span></div>
     <div class="what">${esc(m.note || what)}</div>
-    ${open || s.status === 'done' ? `<div class="steps">${[1, 2, 3, 4].map(n => `<i class="${n <= step ? 'on' : ''}"></i>`).join('')}</div>` : ''}
+    ${step ? `<div class="steps">${[1, 2, 3, 4].map(n => `<i class="${n <= step ? 'on' : ''}"></i>`).join('')}</div>` : ''}
     <div class="status ${tone}">${esc(text)}</div>
     ${open ? `<button class="act warn${isArmed(k) ? ' armed' : ''}" data-m="${m.id}" data-s="${i}"><b>${tr(isArmed(k) ? 'sure' : 'cancel')}</b></button>` : ''}
   </div>`;

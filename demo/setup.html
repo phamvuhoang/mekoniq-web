@@ -249,8 +249,10 @@ const HINT = {
 
 // D = the draft being edited; it reaches the orchestrator on Lưu. dirty = differs from App.site.
 let D = null, dirty = false, saving = false, tab = new URLSearchParams(location.search).get('tab') || 'points', sel = null, robotId = null;
+let pendingSave = null, sentDraft = '';
 let stale = false, err = '';   // strips under the app bar: another station saved / last save or import failed
 const TABS = { points: 'Điểm & bản đồ', robots: 'Robot', roles: 'Vai trò & thời gian', guest: 'Khách hàng', backup: 'Sao lưu', system: 'Hệ thống' };
+if (!TABS[tab]) tab = 'points';
 const valRobots = () => D.robots.filter(r => r.driver === 'valetudo');
 const curRobot = () => valRobots().find(r => r.id === robotId) || valRobots()[0] || null;
 
@@ -261,7 +263,7 @@ startClock();
 
 function setDirty(v) {
   dirty = v;
-  $('save').disabled = !dirty || saving; $('revert').disabled = !dirty;
+  $('save').disabled = !dirty || saving; $('revert').disabled = !dirty || saving;
   $('save').textContent = saving ? 'Đang lưu…' : dirty ? 'Lưu' : 'Đã lưu';
 }
 // 'ok' -> toast; 'err' -> red strip until the next save / dismiss; '' clears.
@@ -270,7 +272,7 @@ function strips() {
   setHTML($('strips'), (stale ? '<div class="strip"><span class="kind">Cảnh báo</span><span class="grow">Máy khác vừa lưu cấu hình — bản anh/chị đang sửa đã cũ.</span><button class="btn sm dark" id="reload">Tải lại bản mới</button></div>' : '') +
     (err ? `<div class="strip error"><span class="kind">Lỗi</span><span class="grow">${esc(err)}</span><button class="btn sm dark" data-act="ack">Đã biết</button></div>` : ''));
 }
-function load() { D = clone(App.site); setDirty(false); stale = false; strips(); sel = null; render(); }
+function load() { D = clone(App.site); saving = false; pendingSave = null; sentDraft = ''; setDirty(false); stale = false; strips(); sel = null; render(); }
 
 function render() {
   if (!D) return;
@@ -321,11 +323,16 @@ $('points').addEventListener('click', e => {
   }
   if (row) { sel = sel === row.dataset.pt ? null : row.dataset.pt; renderPoints(); }
 });
+// The dish area and a robot's dock cannot be deleted; a role whose home it was gets none.
+const keep = id => D.points[id].kind === 'dish' || D.robots.some(r => r.dock === id);
 $('delPoint').onclick = () => {
-  const id = sel; if (!id || !D.points[id] || D.points[id].kind === 'dish') return;
-  armed('del-' + id, () => { delete D.points[id]; for (const r of valRobots()) delete r.valetudo.points[id]; if (sel === id) sel = null; setDirty(true); render(); }, render);
+  const id = sel; if (!id || !D.points[id] || keep(id)) return;
+  armed('del-' + id, () => {
+    delete D.points[id]; for (const r of valRobots()) delete r.valetudo.points[id]; for (const r of D.roles) if (r.home === id) r.home = null;
+    if (sel === id) sel = null; setDirty(true); render();
+  }, render);
 };
-$('robotPick').onclick = e => { const b = e.target.closest('[data-robot]'); if (b) { robotId = b.dataset.robot; renderPoints(); } };
+$('robotPick').onclick = e => { const b = e.target.closest('[data-robot]'); if (b) { robotId = b.dataset.robot; renderPoints(); pollMap(); } };
 $('addTable').onclick = () => { const t = SiteLib.nextTable(D); D.points[t.id] = { name: t.name, kind: 'table' }; sel = t.id; setDirty(true); render(); };
 const addPoint = (kind, what, eg) => () => {
   const id = prompt(`Mã ${what} (chữ/số, ví dụ ${eg}):`); if (!id) return;
@@ -337,9 +344,12 @@ $('addStation').onclick = addPoint('station', 'trạm', 'bar2');
 $('addEntrance').onclick = addPoint('entrance', 'cửa đón khách', 'door');
 
 // ---- Map (Task 11: canvas, teach by robot position, probe) ----
-let vm = null, mapT = 0, zoom = 1, lastMap = null, tapAt = null;
+let vm = null, mapT = 0, zoom = 1, lastMap = null, tapAt = null, mapPoll = 0;
+const mapKey = r => r ? r.id + '|' + r.valetudo.topic : '';
+const hasCurrentMap = r => lastMap && r && lastMap.robot === r.id && lastMap.topic === r.valetudo.topic;
 function drawMap() {
   const r = curRobot(), p = sel && D.points[sel];
+  if (lastMap && !hasCurrentMap(r)) { lastMap = null; mapT = 0; if (vm) vm.setMap(null); }   // another robot's map: never shown or taught in its frame
   // Selected-point row replaces the hint; positioning tools only for a Valetudo robot and a point the robot doesn't report itself.
   $('pttools').hidden = !p; $('mapHint').hidden = !!p;
   $('ptpos').hidden = !(p && r && p.kind !== 'dock');
@@ -349,7 +359,7 @@ function drawMap() {
     const xy = p.kind !== 'dock' && r && pt;
     $('selXY').textContent = p.kind === 'dock' ? 'lấy từ robot' : !r ? '' : xy ? `x ${pt.x} · y ${pt.y} cm` : 'chưa định vị — chạm lên bản đồ';
     $('selXY').classList.toggle('vi', !xy);   // JetBrains Mono has no Vietnamese glyphs: mono for coordinates only
-    $('delPoint').disabled = p.kind === 'dish';
+    $('delPoint').disabled = keep(sel);
     $('delPoint').textContent = isArmed(k) ? 'Xoá điểm?' : 'Xoá điểm';
     $('delPoint').classList.toggle('armed', isArmed(k));
     if (r) {
@@ -370,18 +380,19 @@ function drawMap() {
   $('mapWarn').textContent = 'Bản đồ robot có thể đã vẽ lại — kiểm tra lại các điểm';
 }
 async function pollMap() {
-  const r = curRobot();
+  const r = curRobot(), key = mapKey(r), poll = ++mapPoll;
   if (!r) return;
   try {
     const res = await fetch('/api/map/' + encodeURIComponent(r.id), { cache: 'no-store' });
-    if (!res.ok) { $('mapHint').textContent = 'Chưa nhận được bản đồ từ robot ' + r.id + ' — kiểm tra MQTT và “Provide map data” trong Valetudo.'; return; }
-    const m = await res.json();
-    if (m.t !== mapT) { mapT = m.t; lastMap = m; vm.setMap(m); }
+    const m = res.ok ? await res.json() : null;
+    if (poll !== mapPoll || mapKey(curRobot()) !== key) return;   // robot switched meanwhile: its own poll is on the way
+    if (!m || m.topic !== r.valetudo.topic) { lastMap = null; mapT = 0; vm.setMap(null); drawMap(); $('mapHint').textContent = 'Chưa nhận được bản đồ từ robot ' + r.id + ' — kiểm tra MQTT và “Provide map data” trong Valetudo.'; return; }
+    if (!hasCurrentMap(r) || m.t !== mapT) { mapT = m.t; lastMap = { ...m, robot: r.id }; vm.setMap(lastMap); }
     drawMap();
   } catch (e) {}
 }
 function setXY(x, y) {
-  const r = curRobot(); if (!r || !sel) return;
+  const r = curRobot(); if (!r || !sel || !hasCurrentMap(r) || D.points[sel].kind === 'dock') return;   // no map: no frame to place in; a dock comes from the robot
   r.valetudo.points[sel] = { x: Math.max(0, Math.round(x)), y: Math.max(0, Math.round(y)) };
   setDirty(true); renderPoints();
 }
@@ -438,7 +449,7 @@ $('robots').addEventListener('click', e => {
   if (g && drv) {
     const r = D.robots[+g.dataset.robotI];
     if (drv.dataset.drv === 'valetudo') { if (r.driver === 'valetudo') return; r.driver = 'valetudo'; r.valetudo = r.valetudo || { topic: '', points: {} }; }
-    else { if (r.driver !== 'valetudo') return; delete r.driver; delete r.valetudo; }
+    else { if (r.driver !== 'valetudo') return; delete r.driver; }   // r.valetudo stays in the draft (tapping back restores it); normalize drops it on save
     setDirty(true); return render();
   }
   const b = e.target.closest('[data-delr]'); if (!b) return;
@@ -447,7 +458,8 @@ $('robots').addEventListener('click', e => {
 $('addRobot').onclick = () => {
   let n = D.robots.length + 1; while (D.robots.some(r => r.id === 'R' + n)) n++;
   const dock = Object.keys(D.points).find(k => D.points[k].kind === 'dock');
-  D.robots.push({ id: 'R' + n, dock, driver: 'valetudo', valetudo: { topic: '', points: {} } }); setDirty(true); render();
+  // A simulator site (web demo) gets another simulated robot, a real site a Valetudo one.
+  D.robots.push({ id: 'R' + n, dock, ...(!hasSim() && { driver: 'valetudo', valetudo: { topic: '', points: {} } }) }); setDirty(true); render();
 };
 
 // ---- Roles & timing ----
@@ -553,17 +565,17 @@ $('download').onclick = () => {
   a.click(); URL.revokeObjectURL(a.href);
 };
 $('upload').onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
-  if (f.size > SiteLib.MAX_BYTES) { msg('Tệp quá lớn (> 512 KB)', 'err'); e.target.value = ''; return; }
+  const f = e.target.files[0]; e.target.value = '';   // so the same file can be picked again after fixing it
+  if (!f) return;
+  if (f.size > SiteLib.MAX_BYTES) return msg('Tệp quá lớn (> 512 KB)', 'err');
   try {
     const parsed = JSON.parse(await f.text());
     const { site: norm, errors } = SiteLib.normalize(parsed, App.site);
     if (errors.length) return msg('Tệp không hợp lệ: ' + errors.join('; '), 'err');
     D = norm; D.rev = App.site.rev; setDirty(true); render(); msg('Đã nạp tệp — bấm Lưu để áp dụng', 'ok');
   } catch (err) { msg('Tệp không đọc được (không phải JSON)', 'err'); }
-  e.target.value = '';
 };
-$('reset').onclick = () => armed('reset', () => { saving = true; setDirty(true); send({ type: 'siteReset', by: BY }); }, () => { $('reset').textContent = isArmed('reset') ? 'Chạm lần nữa để khôi phục' : 'Khôi phục mặc định'; $('reset').classList.toggle('armed', isArmed('reset')); });
+$('reset').onclick = () => armed('reset', () => { if (!$('offline').hidden) return msg('Mất kết nối — chưa khôi phục.', 'err'); pendingSave = saveId(); sentDraft = JSON.stringify(D); saving = true; setDirty(true); send({ type: 'siteReset', requestId: pendingSave, by: BY }); }, () => { $('reset').textContent = isArmed('reset') ? 'Chạm lần nữa để khôi phục' : 'Khôi phục mặc định'; $('reset').classList.toggle('armed', isArmed('reset')); });
 
 // ---- Hệ thống (read-only): GET /api/health every 3 s + App.site / App.state ----
 let health = null, healthErr = false, healthTimer = null;
@@ -572,14 +584,14 @@ async function pollHealth() {
     const res = await fetch('/api/health', { cache: 'no-store' });
     const h = res.ok ? await res.json().catch(() => null) : null;
     if (h && h.server) { health = h; healthErr = false; }
-    // Never answered: static web demo, no endpoint. After a good report a 404 is a Node-RED deploy re-creating its routes.
-    else if (!health && res.status !== 503) { healthErr = true; healthPolling(false); }
+    // No report yet and no endpoint: static web demo. Polling goes on: a Node-RED deploy re-creating its routes 404s too.
+    else if (res.status !== 503) healthErr = !health;
   } catch (e) {}   // server unreachable: #offline says so; keep the last report
   if (tab === 'system') renderSystem();
 }
 // Polls only while the tab is shown.
 function healthPolling(on) {
-  if (on && !healthTimer && !healthErr) { healthTimer = setInterval(pollHealth, 3000); pollHealth(); }
+  if (on && !healthTimer) { healthTimer = setInterval(pollHealth, 3000); pollHealth(); }
   if (!on && healthTimer) { clearInterval(healthTimer); healthTimer = null; }
 }
 const realRobots = () => App.site.robots.filter(r => r.driver === 'valetudo');
@@ -594,7 +606,7 @@ function checks() {
     const from = esc(h.server.ipChanged.from), to = esc(h.server.ipChanged.to);
     add('error', `IP điện thoại đã đổi từ ${from} sang ${to}. Robot và mã QR vẫn trỏ về ${from}.`, `1. Valetudo → Connectivity → MQTT → Host = ${to}. 2. Mở lại trang trên tablet. 3. In lại QR. Rồi bấm <b>Đã cập nhật robot và QR</b>.`);
   }
-  if (h && h.mqtt.link === false) add('error', 'Broker MQTT trong máy không chạy. Robot thật không điều khiển được.', 'Termux: <code>mosquitto -c ~/robot/mosquitto.conf -d</code>');
+  if (R.length && h && h.mqtt.link === false) add('error', 'Broker MQTT trong máy không chạy. Robot thật không điều khiển được.', 'Termux: <code>mosquitto -c ~/robot/mosquitto.conf -d</code>');
   for (const r of R) {
     const live = liveOf(r.id), seen = hr(r.id).seenAt;
     if (live && live.offline) add('error', `${esc(r.id)} mất kết nối${seen ? ' ' + ago(seen) : ''}.`, `Robot còn bật? Cùng Wi-Fi? Host MQTT trong Valetudo = ${ip ? esc(ip) : 'IP điện thoại'}?`);
@@ -605,7 +617,7 @@ function checks() {
     if (miss.length) add('warn', `${esc(r.id)} chưa định vị ${miss.length} bàn: ${esc(miss.slice(0, 8).join(', '))}${miss.length > 8 ? '…' : ''}.`, 'Tab Điểm & bản đồ → định vị.');
   }
   for (const r of R) { const w = hr(r.id).wifi; if (w && w.signal !== null && w.signal < -70) add('warn', `${esc(r.id)} sóng Wi-Fi yếu (${w.signal} dBm).`, 'Robot dễ rớt khi đi xa router.'); }
-  if (h && h.mqtt.clients !== null && h.mqtt.clients < 1 + Object.values(h.robots).filter(x => x.online).length)
+  if (R.length && h && h.mqtt.clients !== null && h.mqtt.clients < 1 + Object.values(h.robots).filter(x => x.online).length)
     add('info', `Số kết nối tới broker thấp hơn dự kiến (${h.mqtt.clients}).`, 'Chỉ để tham khảo.');
   if (dirty) add('info', 'Có thay đổi chưa lưu.');
   if (h && h.server.firstRun) add('info', 'Chưa thể biết IP có cố định không.', 'Đặt IP cố định cho máy này trên router (DHCP reservation).');
@@ -626,7 +638,7 @@ function renderSystem() {
     const stat = (k, v, cls = '') => `<div class="stat ${cls}"><span class="lbl">${k}</span>${v}</div>`;
     setHTML($('sysServer'), stat('IP hiện tại · cổng', s.ip ? `<b>${esc(s.ip)}:${s.port}</b>` : '<b class="vi">không rõ</b>', 'big') +
       `<div class="stats">${stat('Tablet này đang dùng', `<b class="id">${esc(location.host)}</b>`)}${stat('IP lần trước', `<b class="id">${esc(s.lastIp || '—')}</b>`)}${stat('Chạy liên tục', `<b>${dur}</b>`)}</div>`);
-    const cfg = `Host: ${h.mqtt.host || '?'}\nPort: ${h.mqtt.port}\nUsername: ${h.mqtt.user}`;
+    const cfg = `${realRobots().length ? '' : 'Không sử dụng trong cấu hình hiện tại.\n'}MQTT: ${h.mqtt.link ? 'đã kết nối' : 'mất kết nối'}\nHost: ${h.mqtt.host || '?'}\nPort: ${h.mqtt.port}\nUsername: ${h.mqtt.user}`;
     if ($('mqttCfg').textContent !== cfg) $('mqttCfg').textContent = cfg;
   }
   const R = realRobots(), T = tableIds();
@@ -652,12 +664,15 @@ $('copyMqtt').onclick = () => {
 };
 
 // ---- Save / revert / tabs ----
+const saveId = () => Date.now().toString(36) + '-' + Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.toString(36)).join('-');
 $('save').onclick = () => {
+  if (!$('offline').hidden) return msg('Mất kết nối — chưa lưu. Bấm Lưu khi có kết nối lại.', 'err');   // send() would drop it
   const r = curRobot();
-  if (r && lastMap) r.valetudo.mapRef = { size: lastMap.size, ...(lastMap.charger && { charger: lastMap.charger }) };   // to notice a re-mapped robot later
-  msg(''); saving = true; setDirty(true); send({ type: 'siteSave', site: D, by: BY });
+  if (hasCurrentMap(r)) r.valetudo.mapRef = { size: lastMap.size, ...(lastMap.charger && { charger: lastMap.charger }) };   // to notice a re-mapped robot later
+  msg(''); pendingSave = saveId(); sentDraft = JSON.stringify(D); saving = true; setDirty(true); send({ type: 'siteSave', site: D, requestId: pendingSave, by: BY });
 };
 $('revert').onclick = () => load();
+addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });   // the logo link leaves the page
 $('strips').onclick = e => { if (e.target.id === 'reload') load(); if (e.target.dataset.act === 'ack') msg(''); };
 document.querySelector('.appbar .seg').onclick = e => {
   const b = e.target.closest('[data-tab]'); if (!b) return;
@@ -669,13 +684,18 @@ document.querySelector('.appbar .seg').onclick = e => {
 connect(m => {
   if (m.type === 'site') {
     if (!D || !dirty) load();
-    else if (saving && m.site.rev === D.rev + 1) { saving = false; load(); msg('Đã lưu cấu hình', 'ok'); }   // our save, acknowledged
+    else if (m.site.rev === D.rev) { if (saving) { saving = false; setDirty(true); msg('Chưa lưu — mất kết nối. Bấm Lưu lần nữa.', 'err'); } }   // the hello after a reconnect: nothing changed, our save never arrived
+    else if (saving && pendingSave && m.site.saveRequestId === pendingSave) {
+      if (JSON.stringify(D) === sentDraft) load();
+      else { D.rev = m.site.rev; saving = false; pendingSave = null; setDirty(true); } // preserve edits made while the request was in flight
+      msg(dirty ? 'Đã lưu bản đã gửi — còn thay đổi mới chưa lưu.' : 'Đã lưu cấu hình', 'ok');
+    }   // our save, acknowledged
     else if (saving) { saving = false; setDirty(true); stale = true; msg('Chưa lưu — cấu hình trên máy chủ vừa đổi (mất kết nối hoặc máy khác lưu). Tải lại rồi sửa lại.', 'err'); }
     else { stale = true; strips(); }
     if (!robotId && curRobot()) robotId = curRobot().id;
     if (!vm && typeof VMap === 'function') { vm = VMap($('vmap'), { fit: true, onTap: (x, y, hitId) => { if (hitId && !sel) { sel = hitId; renderPoints(); } else if (sel) setXY(x, y); else { tapAt = { x, y }; drawMap(); } } }); vm.resize(); drawMap(); pollMap(); setInterval(pollMap, 10000); }
   }
-  if (m.type === 'event' && typeof m.text === 'string' && m.text.startsWith('Không lưu')) { saving = false; setDirty(true); msg(m.text, 'err'); }
+  if (m.type === 'event' && typeof m.text === 'string' && m.text.startsWith('Không lưu')) { saving = false; setDirty(dirty); msg(m.text, 'err'); }
   if (m.type === 'state') { if (tab === 'points') drawMap(); if (tab === 'robots') conn(); if (tab === 'backup') renderBackup(); if (tab === 'system') renderChecks(); }
 });
 </script>

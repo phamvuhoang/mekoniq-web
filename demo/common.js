@@ -146,7 +146,7 @@ function netSVG(map, o = {}) {
   });
   h += hits;
   for (const [id, n] of Object.entries(N))
-    h += `<circle class="node${P[id] ? ' stop' : ''}${o.node === id ? ' sel' : ''}${o.from === id ? ' from' : ''}" ${o.edit ? `data-node="${id}"` : ''} cx="${n.x}" cy="${n.y}" r="${o.edit ? (P[id] ? .24 : .2) : P[id] ? .12 : .07}"/>`;
+    h += `<circle class="node${P[id] ? ' stop' : ''}${o.node === id ? ' sel' : ''}${o.from === id ? ' from' : ''}" ${o.edit ? `data-node="${esc(id)}"` : ''} cx="${n.x}" cy="${n.y}" r="${o.edit ? (P[id] ? .24 : .2) : P[id] ? .12 : .07}"/>`;
   return h;
 }
 // Obstacle disc: N = người (person, passes by), G = ghế/vật (object, stays until removed).

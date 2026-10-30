@@ -20,7 +20,7 @@
   <section class="section"><div class="wrap cards two">
     <div>
       <p class="eyebrow">Pilot interest</p>
-      <h2>Cùng đánh giá<br>nhà hàng của bạn.</h2>
+      <h1>Cùng đánh giá<br>nhà hàng của bạn.</h1>
       <p class="lead">Mô tả không gian và hoạt động hiện tại. MEKONIQ dùng thông tin này để chuẩn bị buổi khảo sát khi dự án sẵn sàng nhận pilot.</p>
       <div class="steps">
         <div class="card"><span class="num">1</span><h3>Gửi thông tin nhà hàng</h3><p>Số bàn, khu vực, khó khăn vận hành hiện tại.</p></div>
@@ -70,8 +70,9 @@
 })();
 // Success state (spec 4.8): hide the fields after the draft is made; "Sửa thông tin" brings them back.
 const leadForm = document.getElementById('lead');
-leadForm.addEventListener('submit', () => leadForm.classList.add('done'));
-document.getElementById('leadEdit').onclick = () => { leadForm.classList.remove('done'); document.getElementById('leadOut').hidden = document.getElementById('leadCopy').hidden = true; };
+// Focus moves with it: the control that had focus is hidden in each state.
+leadForm.addEventListener('submit', () => { leadForm.classList.add('done'); document.getElementById('leadCopy').focus(); });
+document.getElementById('leadEdit').onclick = () => { leadForm.classList.remove('done'); document.getElementById('leadOut').hidden = document.getElementById('leadCopy').hidden = true; leadForm.elements.name.focus(); };
 </script>
 </body>
 </html>

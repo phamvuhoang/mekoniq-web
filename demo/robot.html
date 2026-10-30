@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="vi" data-theme="light"><head>
+<html lang="vi"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MEKONIQ Serve · Robot</title>
 <link rel="icon" href="logo.svg"><link rel="stylesheet" href="brand.css">
@@ -34,7 +34,7 @@
   .act.tall { min-height: var(--act-h); }
   .act.solid { background: var(--danger); color: #fff; }
   .act.solid.armed { background: #8e1c1c; border-color: #8e1c1c; }
-  #toast { position: absolute; z-index: 40; top: 92px; left: calc((100% - 380px) / 2); transform: translateX(-50%); width: max-content; max-width: calc(100% - 420px); pointer-events: none; }
+  #toast { position: absolute; z-index: 40; top: 92px; left: calc((100% - 380px) / 2); translate: -50% 0; width: max-content; max-width: calc(100% - 420px); pointer-events: none; }
 
   /* Content blocks */
   #body .eyebrow { font-size: 15px; letter-spacing: .14em; margin-bottom: 10px; }
@@ -48,8 +48,8 @@
   .split { min-height: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 40px; }
   .split > .l { display: flex; justify-content: center; }
   .split .face { width: 260px; }
-  .split.hello h1 { font-size: 84px; }
-  .split.hand h1 { font-size: 58px; }
+  #body .split.hello h1 { font-size: 84px; }
+  #body .split.hand h1 { font-size: 58px; }
   .face { display: block; }
   .face.move { animation: bob 1.2s ease-in-out infinite; }
   @keyframes bob { 50% { transform: translateY(-6px); } }
@@ -136,8 +136,8 @@
     #acts > * { flex: 1 1 220px; }
     #acts > .info, #acts > .trays { flex-basis: 100%; }
     #toast { left: 50%; max-width: calc(100% - 32px); }
-    #body h1, .split.hand h1 { font-size: 48px; }
-    .split.hello h1 { font-size: 56px; }
+    #body h1, #body .split.hand h1 { font-size: 48px; }
+    #body .split.hello h1 { font-size: 56px; }
     .split { grid-template-columns: minmax(0, 1fr); justify-items: center; align-content: center; text-align: center; gap: 24px; }
     .split .face { width: 200px; }
     .split .eyebrow, .split .chips { justify-content: center; }
@@ -154,8 +154,8 @@
   :root[data-orient=portrait] #acts > * { flex: 1 1 220px; }
   :root[data-orient=portrait] #acts > .info, :root[data-orient=portrait] #acts > .trays { flex-basis: 100%; }
   :root[data-orient=portrait] #toast { left: 50%; max-width: calc(100% - 32px); }
-  :root[data-orient=portrait] #body h1, :root[data-orient=portrait] .split.hand h1 { font-size: 48px; }
-  :root[data-orient=portrait] .split.hello h1 { font-size: 56px; }
+  :root[data-orient=portrait] #body h1, :root[data-orient=portrait] #body .split.hand h1 { font-size: 48px; }
+  :root[data-orient=portrait] #body .split.hello h1 { font-size: 56px; }
   :root[data-orient=portrait] .split { grid-template-columns: minmax(0, 1fr); justify-items: center; align-content: center; text-align: center; gap: 24px; }
   :root[data-orient=portrait] .split .face { width: 200px; }
   :root[data-orient=portrait] .split .eyebrow, :root[data-orient=portrait] .split .chips { justify-content: center; }
@@ -324,16 +324,12 @@ function view(r, m) {
     if (r.why === 'noroute') return { bar: 'Không có lộ trình', sub: 'No route', tone: 'warn',
       body: split(face('sad'), 'Không có lộ trình · No route', `Không có đường tới ${esc(pname(r.target))}.`, `No route to ${esc(pname(r.target))}.`,
         `<p class="lead">Quản lý định vị điểm này trong “Cấu hình”${hasSim() ? ' hoặc kiểm tra lối đi trong “Thiết kế lộ trình”' : ''}, hoặc chuyển xử lý thủ công.</p>`),
-      acts: manual || info('Không có lộ trình', 'Mở lại lối đi trong “Thiết kế lộ trình” · Reopen a lane in Route design') };
+      acts: manual || info('Không có lộ trình', hasSim() ? 'Mở lại lối đi trong “Thiết kế lộ trình” · Reopen a lane in Route design' : 'Định vị điểm này trong “Cấu hình” · Teach this point in Setup') };
     return { bar: 'Cần nhân viên hỗ trợ', sub: 'Staff needed', tone: 'warn',
       body: split(face('sad'), 'Lối đi bị chặn · Path blocked', 'Xin nhường đường.', 'Please make way.',
         '<p class="lead">Lối đi phía trước bị chặn và không còn đường vòng. Vui lòng dọn lối đi.</p>'),
       acts: act('dark tall', 'Nhân viên: đã dọn lối', 'Path cleared', 'clear') + (manual || '') };
   }
-  if (r.nav === 'wait' && r.why !== 'robot' && !r.halt) return { bar: 'Robot đang chờ', sub: 'Waiting', tone: 'warn',
-    body: split(face('wait'), 'Đang chờ · Waiting', 'Xin nhường đường.', 'Please make way.',
-      `<p class="lead">${r.why === 'person' ? 'Có người phía trước — robot chờ quý khách đi qua.' : isValetudo() ? `Có vật cản phía trước — robot sẽ thử đi tiếp sau ${retrySec()} giây.` : `Có vật cản phía trước — robot chờ ${App.site.sim.waitSec} giây rồi tìm đường vòng.`}</p>`),
-    acts: act('outline', 'Nhân viên: đã dọn lối', 'Path cleared', 'clear') };
   if (r.halt === 'paused') {
     const pa = App.state.alerts.find(a => a.key === 'pa-' + ID);
     return { bar: 'Tạm dừng', sub: 'Paused', tone: 'warn',
@@ -344,6 +340,11 @@ function view(r, m) {
   if (r.offline) return { bar: 'Mất kết nối', sub: 'Offline', tone: 'danger',
     body: split(face('sad'), 'Mất kết nối · Offline', 'Mất kết nối robot.', 'Robot connection lost.', '<p class="lead">Đang chờ robot kết nối lại hệ thống…</p>'),
     acts: info('Mất kết nối', 'Đang chờ robot kết nối lại · Waiting for the robot to reconnect') };
+  // After offline: an offline robot keeps its last nav ('wait') and must not show the waiting screen.
+  if (r.nav === 'wait' && r.why !== 'robot' && !r.halt) return { bar: 'Robot đang chờ', sub: 'Waiting', tone: 'warn',
+    body: split(face('wait'), 'Đang chờ · Waiting', 'Xin nhường đường.', 'Please make way.',
+      `<p class="lead">${r.why === 'person' ? 'Có người phía trước — robot chờ quý khách đi qua.' : isValetudo() ? `Có vật cản phía trước — robot sẽ thử đi tiếp sau ${retrySec()} giây.` : `Có vật cản phía trước — robot chờ ${App.site.sim.waitSec} giây rồi tìm đường vòng.`}</p>`),
+    acts: act('outline', 'Nhân viên: đã dọn lối', 'Path cleared', 'clear') };
 
   if (paying && canPay(r)) return payView(r);
   if (ordering && canOrder(r)) return orderView(r);
