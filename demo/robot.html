@@ -499,7 +499,8 @@ function render() {
   if (!r || !canGuide(r, m)) { if (gsent) forget(gsent); guiding = false; gpick = null; gsent = null; }   // guide accepted: the robot left standby
   if (!r || !still(r)) {
     if (ordering && Object.values(cart).some(q => q > 0) && !sending(q => q.type === 'order')) toast('Robot phải đi — đơn chưa gửi, gọi nhân viên · Robot had to leave, order not sent', 'warn');
-    ordering = false; cart = {}; otable = null;
+    if (osent.id) forget(osent.id);
+    ordering = false; cart = {}; otable = null; osent = {};
   } else if (ordering && feat('order')) {   // ordering (back) on: keep only what the current menu still has
     const gone = Object.keys(cart).filter(id => !menu().items.some(i => i.id === id));
     for (const id of gone) delete cart[id];
@@ -581,13 +582,20 @@ $('main').addEventListener('click', e => {
       ['Đã báo nhân viên — vui lòng chờ xác nhận', 'Staff notified — please wait for confirmation'], render, true);
     render();
   }
-  if (a === 'order') { ordering = true; cart = {}; otable = null; render(); }
-  if (a === 'orderBack') { ordering = false; render(); }
+  if (a === 'order') { if (osent.id) forget(osent.id); osent = {}; ordering = true; cart = {}; otable = null; render(); }
+  if (a === 'orderBack') { if (osent.id) forget(osent.id); osent = {}; ordering = false; render(); }
   if (a === 'orderSend') {   // the cart is emptied only by the server's ok; a refusal keeps it. The same cart resent after a timeout or
     // reconnect keeps its requestId, so a lost reply never doubles the kitchen order; a changed cart is a new order.
     const t = hereTable(r) || otable, items = Object.entries(cart).map(([id, qty]) => ({ id, qty })), key = JSON.stringify([t, items]);
-    if (t && items.length) osent = { key, id: request({ type: 'order', table: t, items, requestId: osent.key === key ? osent.id : undefined, by: 'Khách ' + pname(t) + ' (màn ' + ID + ')' }, ['Đã gửi bếp', 'Sent to the kitchen'],
-      rep => { if (rep.ok) { ordering = false; cart = {}; otable = null; osent = {}; } render(); }, true) };
+    if (t && items.length) {
+      // Set the cart identity before sending: the demo may reply synchronously. A reply for an abandoned
+      // cart must not clear the next guest's cart; a timeout on this cart still retries the same request.
+      const sent = osent.key === key ? osent : { key };
+      if (sent !== osent && osent.id) forget(osent.id);
+      osent = sent;
+      sent.id = request({ type: 'order', table: t, items, requestId: sent.id, by: 'Khách ' + pname(t) + ' (màn ' + ID + ')' }, ['Đã gửi bếp', 'Sent to the kitchen'],
+        rep => { if (osent !== sent) return; if (rep.ok) { ordering = false; cart = {}; otable = null; osent = {}; } render(); }, true);
+    }
     render();
   }
   if (a === 'guide') { guiding = true; gpick = null; render(); }

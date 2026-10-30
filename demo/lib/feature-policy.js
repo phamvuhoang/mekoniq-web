@@ -37,11 +37,11 @@
 
   // Speed control needs driver support; unknown drivers are assumed unable.
   function capabilities(r) {
-    return { speedControl: !!r && typeof r === 'object' && (!r.driver || r.driver === 'simulator') };
+    return { speedControl: !!r && typeof r === 'object' && (!r.driver || r.driver === 'sim') };
   }
 
   // Config-only conditions (spec §5); robot position/state is checked when the request arrives.
-  function readiness(site, key) {
+  function readiness(site, key, routeMap) {
     const s = site && site.featurePolicyVersion === 2 ? site : migrate(site);
     const P = obj(s.points), kind = (id, k) => !!P[id] && k.includes(P[id].kind);
     const tables = Object.keys(P).filter(id => kind(id, ['table']));
@@ -50,8 +50,18 @@
     const station = () => need(kind(obj(s.service).requestStation, ['station']), 'no-request-station', 'Chưa chọn trạm nhận yêu cầu hoặc trạm đó không còn');
     if (key === 'callStaff' || key === 'requestBill') { table(); station(); }
     else if (key === 'guide') {
-      const nodes = obj(obj(s.map).nodes);
-      const reach = (r, p) => (r.driver === 'valetudo' ? !!obj(obj(r.valetudo).points)[p] : !!nodes[p]);
+      const map = obj(routeMap || s.map), nodes = obj(map.nodes), edges = Array.isArray(map.edges) ? map.edges : [];
+      // Reachable from a guest pickup point along open lanes, respecting one-way directions.
+      // No route-module dependency: this policy also runs directly in setup.html.
+      const reached = new Set(Object.keys(P).filter(id => kind(id, ['station', 'entrance']) && nodes[id]));
+      const queue = [...reached];
+      for (let i = 0; i < queue.length; i++) for (const e of edges) {
+        if (!e || e.closed) continue;
+        const to = e.a === queue[i] ? e.b : !e.oneway && e.b === queue[i] ? e.a : null;
+        if (to && nodes[to] && !reached.has(to)) { reached.add(to); queue.push(to); }
+      }
+      const reach = (r, p) => r.driver === 'valetudo' ? !!obj(obj(r.valetudo).points)[p]
+        : (!r.driver || r.driver === 'sim') && reached.has(p);
       table();
       need(Object.keys(P).some(id => kind(id, ['station', 'entrance'])), 'no-start', 'Chưa có trạm hoặc lối vào để đón khách');
       need((Array.isArray(s.robots) ? s.robots : []).some(r => r && tables.some(t => reach(r, t))), 'no-robot-route', 'Chưa có robot đi được tới bàn');

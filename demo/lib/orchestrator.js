@@ -25,7 +25,7 @@ const CALL_VI = { staff: 'gọi nhân viên', bill: 'yêu cầu tính tiền' };
 const CALL_FLAG = { staff: 'callStaff', bill: 'requestBill' };
 const RETURN_VI = { 'wrong-item': 'báo nhầm món', 'need-help': 'cần hỗ trợ' };
 const FEATURE_VI = { callStaff: 'Gọi nhân viên', requestBill: 'Yêu cầu tính tiền', guide: 'Dẫn khách', order: 'Gọi món', busRobot: 'Thu dọn từ robot' };
-const RECEIPT_MS = 24 * 3600 * 1000, KEEP_RECEIPTS = 1000;   // call/returnRequest/order receipts (bill receipts live in the bill)
+const RECEIPT_MS = 24 * 3600 * 1000;   // call/returnRequest/order receipts (bill receipts live in the bill)
 const OPEN_BILL = ['prepared', 'claimed', 'settled'];
 const BILL_VI = { billPrepare: 'đã chuẩn bị', billClaim: 'khách báo đã trả', billSettle: 'đã xác nhận thu', billClose: 'đã đóng', billVoid: 'đã vô hiệu hóa' };
 const BILL_FIELDS = ['type', 'table', 'orderIds', 'total', 'note', 'bill', 'rev', 'method', 'reason', 'requestId'];   // whitelist, + server-side by
@@ -92,7 +92,7 @@ const reply = (c, session, requestId, r) => c.ui.push({ session, payload: JSON.s
 // Server-side gate for new business (spec §5, §9): flag on and config ready, else a refusal and nothing changes.
 // Work already accepted (confirm, pause, cancel, release, unload, speed of a running guide) is never gated.
 function allowed(c, key, session, requestId) {
-  const p = Policy.readiness(c.site, key);
+  const p = Policy.readiness(c.site, key, c.st.map);
   if (!p.effective) reply(c, session, requestId, p.enabled ? { ok: false, code: 'not-ready', text: p.reasons.map(x => x.text).join('; ') }
     : { ok: false, code: 'disabled', text: `Tính năng "${FEATURE_VI[key]}" đang tắt` });
   return p.effective;
@@ -102,13 +102,13 @@ const reqStation = c => (c.site.service || {}).requestStation || null;   // a v2
 // re-alerted, even after ack. No requestId (old cached client): processed without a receipt.
 const rid = d => (typeof d.requestId === 'string' ? d.requestId.trim().slice(0, 100) : '');
 function seen(c, d, fp, session) {
+  c.st.requests = c.st.requests.filter(q => c.now - q.t < RECEIPT_MS);
   const q = rid(d) && c.st.requests.find(x => x.id === rid(d));
   if (q) reply(c, session, d.requestId, q.fp === fp ? { ok: true, duplicate: true, text: 'Yêu cầu đã được gửi' } : { ok: false, code: 'request-conflict', text: 'Mã yêu cầu đã dùng cho yêu cầu khác' });
   return !!q;
 }
 function accept(c, d, session, fp, text) {
   if (rid(d)) c.st.requests.push({ id: rid(d), fp, t: c.now });
-  if (c.st.requests.length > KEEP_RECEIPTS) c.st.requests.shift();   // ponytail: flood guard drops the oldest; raise if a site ever nears it
   reply(c, session, d.requestId, { ok: true, text });
 }
 
@@ -213,7 +213,7 @@ function guide(c, d, by, session) {
   // Robots only go idle at the dock, so "waiting at the entrance" always means a standby stop there.
   if (!s || s.a !== 'standby' || !['station', 'entrance'].includes(P[s.p].kind) || !allowed(c, 'guide', session, d.requestId)) return;
   const cfg = c.site.robots.find(x => x.id === r.id) || {};   // this robot must know the way: route node / taught point
-  if (!(cfg.driver === 'valetudo' ? ((cfg.valetudo || {}).points || {})[d.to] : c.st.map.nodes[d.to]))
+  if (!(cfg.driver === 'valetudo' ? ((cfg.valetudo || {}).points || {})[d.to] : R.plan(c.st.map, [[s.p, 0]], d.to)))
     return reply(c, session, d.requestId, { ok: false, code: 'unreachable', text: `${r.id} chưa đi được tới ${pname(c, d.to)}` });
   s.status = 'done'; s.by = by; finish(c, cur);
   const m = { id: ++c.st.seq, kind: 'guide', by, urgent: false, robotPref: r.id, createdAt: c.now, startedAt: c.now, status: 'active',
@@ -650,7 +650,7 @@ function fromUI(c, d, session, seed) {
       const billed = [...new Set(st.bills.filter(b => OPEN_BILL.includes(b.status)).map(b => pname(c, b.table)))];
       if (billed.length) return reply(c, session, d.requestId, { ok: false, code: 'billing',
         text: `${billed.join(', ')} còn phiếu tính tiền chưa đóng — đóng lượt hoặc vô hiệu hóa phiếu trước khi khởi động lại demo` });
-      const keep = { billSeq: st.billSeq, orderSeq: st.orderSeq, bills: st.bills, orders: st.orders.filter(o => o.status === 'closed') };
+      const keep = { requests: st.requests.filter(q => c.now - q.t < RECEIPT_MS), billSeq: st.billSeq, orderSeq: st.orderSeq, bills: st.bills, orders: st.orders.filter(o => o.status === 'closed') };
       for (const k of Object.keys(st)) delete st[k];
       Object.assign(st, init(c.site, c.now), keep);
       c.cmds.push({ cmd: 'reset' });

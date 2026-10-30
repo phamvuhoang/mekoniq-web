@@ -79,7 +79,7 @@ function missionOf(r) { return r && r.mission ? App.state.missions.find(m => m.i
 const etaSec = r => Math.round((r.rem || 0) / ((App.site.sim || {}).speed || 1) / (r.slow || 1));   // remaining route length, not straight line
 // Simulator robots drive on the hand-drawn floor plan (web demo); a Valetudo-only site shows the robot's own map instead.
 const vnd = n => String(n).replace(/\B(?=(\d{3})+$)/g, '.') + 'đ';
-const feat = f => !!App.site && FeaturePolicy.readiness(App.site, f).effective;   // flag on and config ready (lib/feature-policy.js, spec §5)
+const feat = f => !!App.site && FeaturePolicy.readiness(App.site, f, App.map).effective;   // flag on and config ready (lib/feature-policy.js, spec §5)
 const hasSim = () => !!App.site && App.site.robots.some(r => !r.driver || r.driver === 'sim');
 // [text, tone] for a robot's current status.
 function robotStatus(r) {

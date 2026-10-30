@@ -77,6 +77,7 @@ document.getElementById('reset').onclick = e => armed('reset', () => send({ type
 const card = (href, tag, title, desc) => `<a class="c" href="${href}" target="_blank"><span class="tag">${esc(tag)}</span><h3>${esc(title)} ↗</h3><p>${esc(desc)}</p></a>`;
 const group = (title, cards) => `<section><p class="eyebrow">${esc(title)}</p><div class="cards">${cards}</div></section>`;
 connect(m => {
+  if (m.type === 'event' && m.reply && m.ok === false) toast(refusal(m), 'warn');
   if (m.type !== 'site') return;
   const S = App.site, tables = Object.keys(S.points).filter(k => S.points[k].kind === 'table');
   const t0 = S.points.T05 ? 'T05' : tables[0];

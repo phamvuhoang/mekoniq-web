@@ -741,7 +741,7 @@ function renderChecks() {
 function renderSysFeatures() {
   const S = App.site, kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
   setHTML($('sysFeatures'), kv('Mô hình phục vụ', profileVi(S)) + Object.keys(FEATURES).map(k => {
-    const r = FeaturePolicy.readiness(S, k), [t, c] = featState(r);
+    const r = FeaturePolicy.readiness(S, k, App.map), [t, c] = featState(r);
     return kv(FEATURES[k][0], `<span class="pill ${c}">${t}</span>`) + (r.enabled && !r.ready ? `<div class="why">${esc(r.reasons.map(x => x.text).join(' · '))}</div>` : '');
   }).join('') + kv('Khách trả/huỷ món', cancelVi(S)) + kv('Trạm nhận yêu cầu', esc(stationVi(S))));
 }
