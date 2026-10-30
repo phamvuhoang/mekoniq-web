@@ -42,7 +42,7 @@
   </div>
   <p class="eyebrow">Demo tương tác · chạy hoàn toàn trong trình duyệt</p>
   <h1>Mọi màn hình, <span>một chỗ.</span></h1>
-  <p>Ba robot giả lập, mười hai bàn, nhiều trạm cùng lúc. Gọi robot, giao nhiều bàn một chuyến, huỷ món, xử lý sự cố — tất cả đồng bộ giữa các tab của trình duyệt này.</p>
+  <p>Ba robot giả lập, mười hai bàn, nhiều trạm cùng lúc. Gọi robot, giao nhiều bàn một chuyến, khách báo nhầm món, tính tiền do nhân viên xác nhận, xử lý sự cố — tất cả đồng bộ giữa các tab của trình duyệt này.</p>
   <div class="row"><a class="btn primary" href="showcase.html" title="Bếp, robot và khách trên cùng một màn hình">▶ Chế độ trình diễn</a><a class="btn" href="../index.html">← Trang giới thiệu</a></div>
 </div></section>
 <main><div id="hub"></div>
@@ -52,12 +52,21 @@
       <li><b>Trạm bếp:</b> chọn Bàn 05 và Bàn 07 → “Gọi robot · giao 2 bàn”. Robot gần nhất nhận việc.</li>
       <li><b>Màn robot:</b> khi robot tới bếp, bấm “Đã xếp xong · Đi giao”.</li>
       <li><b>Khách Bàn 05:</b> robot tới bàn, đọc thông báo tiếng Việt → bấm “Đã nhận món”.</li>
-      <li><b>Khách Bàn 07</b> (trang QR): bấm “Huỷ món này” → robot tự mang khay 2 về bếp.</li>
+      <li><b>Khách Bàn 07</b> (trang QR): bấm “Báo nhầm món / Cần hỗ trợ” → trạm bếp nhận yêu cầu, robot giữ nguyên chuyến; nhân viên bấm × ở Bàn 07 trong hàng chờ nếu cần thu hồi khay.</li>
       <li><b>Vật cản:</b> ở trạm, mở tab “Giám sát”, chọn “Đặt vật cản” trên sơ đồ rồi chạm lên lối đi ngay trước robot → robot dừng, xin nhường đường, chờ rồi tự đi vòng. Chặn cả đường vòng → mọi trạm nhận cảnh báo.</li>
       <li><b>Thiết kế lộ trình:</b> mở “Thiết kế lộ trình”, đóng một lối đi hoặc đặt lối một chiều → “Áp dụng cho đội robot” → robot đang chạy tự tính lại đường.</li>
     </ol></div>
+  <div class="c"><span class="tag">Gợi ý</span><h3>Tính tiền do nhân viên xác nhận</h3>
+    <ol class="script">
+      <li><b>Khách Bàn 05</b> (trang QR): bấm “Yêu cầu tính tiền”.</li>
+      <li><b>Trạm bếp</b>, mục “Tính tiền”: chọn Bàn 05, đối chiếu tổng phải thu, đánh dấu đã đối chiếu → “Chuẩn bị phiếu”.</li>
+      <li><b>Màn robot:</b> gọi robot tới Bàn 05; khi robot đứng tại bàn, “Thanh toán” hiện QR theo đúng phiếu → khách bấm “Tôi đã chuyển khoản”.</li>
+      <li><b>Trạm:</b> nhân viên kiểm tra giao dịch trong ứng dụng ngân hàng rồi “Xác nhận đã thu tiền” → “Đóng lượt tính tiền”. Khách báo đã chuyển không phải xác nhận của ngân hàng; robot không kiểm tra tiền.</li>
+      <li><b>Bật/tắt tính năng:</b> Cấu hình → Hệ thống → “Quản lý tính năng” → tab Tính năng.</li>
+    </ol></div>
   <div class="c"><span class="tag">Giới thiệu</span><h3>Về bản demo này</h3>
-    <p>Bộ điều phối và robot giả lập chạy ngay trong trình duyệt của bạn — cùng mã nguồn với bản chạy trên Node-RED tại nhà hàng. Không gửi dữ liệu đi đâu. Các tab/cửa sổ trong <b>cùng trình duyệt</b> đồng bộ với nhau; thiết bị khác sẽ có nhà hàng mô phỏng riêng. Robot giả lập đi theo mạng lối đi bạn thiết kế, tự chờ và đi vòng khi gặp vật cản; robot thật dùng bản đồ và cảm biến của hãng.</p>
+    <p>Bộ điều phối và robot giả lập chạy ngay trong trình duyệt của bạn — cùng mã nguồn với bản chạy trên Node-RED tại nhà hàng. Không gửi dữ liệu đi đâu. Các tab/cửa sổ trong <b>cùng trình duyệt</b> đồng bộ với nhau; thiết bị khác sẽ có nhà hàng mô phỏng riêng. Robot giả lập đi theo mạng lối đi bạn thiết kế, tự chờ và đi vòng khi gặp vật cản; robot thật dùng bản đồ và cảm biến của hãng. “Đi chậm hơn” khi dẫn khách chỉ có trên robot giả lập, robot Valetudo không chỉnh được tốc độ.</p>
+    <p style="margin-top:8px">Khi bản demo đổi cấu hình mẫu (như bản có tính năng và tính tiền này), dữ liệu demo đã lưu trong trình duyệt được xoá một lần.</p>
     <div class="row"><button class="btn sm" id="reset">↺ Xoá dữ liệu demo</button></div></div>
 </div></section></main>
 <script src="transport.js"></script><script src="common.js"></script>
@@ -75,10 +84,10 @@ connect(m => {
     group('Máy trạm nhân viên', S.roles.map(r => card(`station.html?role=${encodeURIComponent(r.id)}`, 'Nhân viên', r.name, DESC[r.id] || 'Máy trạm theo vai trò')).join('')
       + card('station.html?role=ql&view=mon', 'Quản lý', 'Giám sát & sơ đồ', 'Sơ đồ nhà hàng, robot, cảnh báo và nhật ký')) +
     group('Màn hình trên robot', S.robots.map(r => card(`robot.html?robot=${encodeURIComponent(r.id)}`, 'Khách & nhân viên', 'Robot ' + r.id, 'Tablet gắn trên robot')).join('')) +
-    group('Khách hàng', (t0 ? card(`table.html?t=${encodeURIComponent(t0)}`, 'Khách hàng · QR tại bàn', pname(t0) + ' · Theo dõi món', 'Trang khách quét QR: xem tiến độ, huỷ món') : '')
+    group('Khách hàng', (t0 ? card(`table.html?t=${encodeURIComponent(t0)}`, 'Khách hàng · QR tại bàn', pname(t0) + ' · Theo dõi món', 'Trang khách quét QR: xem tiến độ, gọi nhân viên, yêu cầu tính tiền') : '')
       + `<div class="c wide"><span class="tag">Chọn số bàn</span><div class="tgrid">${tables.map(t => `<a href="table.html?t=${encodeURIComponent(t)}" target="_blank">${esc(short(t))}</a>`).join('')}</div></div>`) +
     // Cấu hình is needed on real (Valetudo) sites too; only the route designer needs the simulator.
-    group('Cấu hình', card('setup.html', 'Quản lý', 'Cấu hình', 'Bàn, trạm, điểm dừng, vai trò, thời gian, sao lưu')
+    group('Cấu hình', card('setup.html', 'Quản lý', 'Cấu hình', 'Tính năng, bàn, trạm, điểm dừng, vai trò, thời gian, sao lưu')
       + (hasSim() ? card('map.html', 'Quản lý', 'Thiết kế lộ trình', 'Lối đi, lối hẹp, một chiều, đóng lối (robot giả lập)') : ''));
 });
 </script>

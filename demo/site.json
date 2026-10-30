@@ -571,11 +571,19 @@
     ]
   },
   "rev": 0,
+  "featurePolicyVersion": 2,
+  "serviceProfile": "custom",
   "features": {
-    "call": true,
+    "callStaff": true,
+    "requestBill": true,
     "guide": true,
     "order": true,
-    "pay": true
+    "pay": true,
+    "busRobot": true
+  },
+  "customerCancel": "request",
+  "service": {
+    "requestStation": "kitchen"
   },
   "notes": [
     "Không hành",
@@ -688,6 +696,7 @@
   "payment": {
     "bank": "VCB",
     "account": "0000000000",
-    "name": "MEKONIQ DEMO"
+    "name": "MEKONIQ DEMO",
+    "verification": "staff"
   }
 }

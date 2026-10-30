@@ -18,9 +18,11 @@ const Transport = (() => {
   }
 
   async function lead() {
-    const route = await load('lib/route.js'), siteLib = await load('lib/site.js');
-    const [O, S, seed] = await Promise.all([load('lib/orchestrator.js', { './route': route, './site': siteLib }), load('lib/simulator.js', { './route': route }),
-      fetch('site.json').then(r => r.json())]);
+    const route = await load('lib/route.js'), policy = await load('lib/feature-policy.js');
+    const siteLib = await load('lib/site.js', { './feature-policy': policy }), billing = await load('lib/billing.js');
+    const [O, S, seed] = await Promise.all([
+      load('lib/orchestrator.js', { './route': route, './site': siteLib, './feature-policy': policy, './billing': billing }),
+      load('lib/simulator.js', { './route': route }), fetch('site.json').then(r => r.json())]);
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
     // seed = this deploy's site.json (siteReset target); custom = what setup.html saved, like global.site || seed on Node-RED.

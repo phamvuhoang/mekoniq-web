@@ -26,7 +26,7 @@
   .item .act b { font-size: 17px; }
   .empty { text-align: center; color: var(--muted); padding: 24px 0; }
   #lang button { min-height: 36px; padding: 6px 12px; }
-  footer.ft { position: sticky; bottom: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); background: #f6f8f4; border-top: 1px solid var(--line); }
+  footer.ft { position: sticky; bottom: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); background: #f6f8f4; border-top: 1px solid var(--line); }
   footer.ft .act { min-height: 64px; }
   footer.ft .act b { font-size: 17px; }
   body.ft .toasts { bottom: 120px; }
@@ -42,7 +42,7 @@
 <footer class="ft" id="foot" hidden></footer>
 </div>
 <div id="offline" hidden></div>
-<script src="transport.js"></script><script src="common.js"></script>
+<script src="lib/feature-policy.js"></script><script src="transport.js"></script><script src="common.js"></script>
 <script>
 // Opened from the QR code on each table: table.html?t=T05
 const T = new URLSearchParams(location.search).get('t') || 'T01';
@@ -51,27 +51,33 @@ const $ = id => document.getElementById(id);
 // Guest-facing strings, VI + EN (spec 6.5). Functions take the params status() returns.
 const DICT = {
   vi: { brand: 'Serve S1 · Khách hàng', eyebrow: 'Theo dõi món của bạn', table: t => 'Bàn ' + t, food: 'Món ăn', drink: 'Đồ uống', tray: 'khay',
-    help: 'Bạn có thể huỷ món đang trên đường tới. Nếu món đã lên khay, robot sẽ mang món về lại bếp/quầy. Cần hỗ trợ khác, vui lòng gọi nhân viên.',
+    help: 'Nhầm món hoặc cần hỗ trợ với món đang tới? Bấm “Báo nhầm món / Cần hỗ trợ”, nhân viên sẽ tới bàn.',
+    helpDirect: 'Bạn có thể yêu cầu robot mang món đang tới về lại bếp/quầy. Đây chỉ là xử lý chuyến giao, không phải hoàn tiền. Cần hỗ trợ khác, vui lòng gọi nhân viên.',
     empty: 'Chưa có món nào đang tới bàn của bạn.', offline: 'Mất kết nối — đang kết nối lại…',
-    manual: () => 'Nhân viên sẽ mang món tới bàn', done: () => 'Đã nhận · chúc ngon miệng', mine: () => 'Bạn đã huỷ món này', cancelled: () => 'Món đã được huỷ', queued: () => 'Đang chờ robot',
+    manual: () => 'Nhân viên sẽ mang món tới bàn', done: () => 'Đã nhận · chúc ngon miệng', mine: () => 'Bạn đã yêu cầu mang món này về', cancelled: () => 'Món đã được huỷ', queued: () => 'Đang chờ robot',
     prep: p => `${p.place} đang chuẩn bị · robot ${p.robot} tới lấy`, here: p => `Robot ${p.robot} đã tới bàn — mời lấy món ở khay ${p.tray}`,
     coming: p => `Robot ${p.robot} đang tới bàn bạn`, other: p => `Robot ${p.robot} đang giao bàn khác trước, sau đó tới bàn bạn`,
-    paused: ' (robot đang tạm dừng)', cancel: 'Huỷ món này', sure: 'Chạm lần nữa để huỷ món',
+    paused: ' (robot đang tạm dừng)', cancel: 'Yêu cầu mang món về', sure: 'Chạm lần nữa — mang món về, không phải hoàn tiền', cancelOk: 'Robot sẽ mang món về',
+    ret: 'Báo nhầm món / Cần hỗ trợ', retOk: 'Đã báo nhân viên — vui lòng chờ', sending: 'Đang gửi…',
     order: 'Đơn', orderNew: 'Bếp đã nhận · đang chuẩn bị', orderPaid: 'Đã báo chuyển khoản · chờ nhân viên xác nhận', total: 'Tổng',
-    staff: 'Gọi nhân viên', bill: 'Xin hoá đơn', staffOk: 'Đã gọi nhân viên — vui lòng chờ', billOk: 'Đã xin hoá đơn — nhân viên sẽ mang tới', moved: t => `Món này của ${t} — bếp đã sửa nhầm bàn` },
+    staff: 'Gọi nhân viên', bill: 'Yêu cầu tính tiền', staffOk: 'Đã gọi nhân viên — vui lòng chờ', billOk: 'Đã yêu cầu tính tiền — nhân viên sẽ tới', moved: t => `Món này của ${t} — bếp đã sửa nhầm bàn` },
   en: { brand: 'Serve S1 · Guest', eyebrow: 'Track your order', table: t => 'Table ' + t, food: 'Food', drink: 'Drinks', tray: 'tray',
-    help: 'You can cancel an item on its way. If it is already on a tray, the robot takes it back to the kitchen/bar. For anything else, please call staff.',
+    help: 'Wrong item or need help with an item on its way? Tap “Wrong item / Need help” and staff will come to your table.',
+    helpDirect: 'You can ask the robot to take an item on its way back to the kitchen/bar. This only changes the delivery trip, it is not a refund. For anything else, please call staff.',
     empty: 'Nothing on its way to your table yet.', offline: 'Connection lost — reconnecting…',
-    manual: () => 'Staff will bring your food to the table', done: () => 'Received · enjoy your meal', mine: () => 'You cancelled this item', cancelled: () => 'This item was cancelled', queued: () => 'Waiting for a robot',
+    manual: () => 'Staff will bring your food to the table', done: () => 'Received · enjoy your meal', mine: () => 'You sent this item back', cancelled: () => 'This item was cancelled', queued: () => 'Waiting for a robot',
     prep: p => `${p.place} is preparing · robot ${p.robot} picks it up`, here: p => `Robot ${p.robot} is at your table — please take tray ${p.tray}`,
     coming: p => `Robot ${p.robot} is on the way to your table`, other: p => `Robot ${p.robot} serves another table first, then yours`,
-    paused: ' (robot paused)', cancel: 'Cancel this item', sure: 'Tap again to cancel',
+    paused: ' (robot paused)', cancel: 'Send this item back', sure: 'Tap again — trip only, not a refund', cancelOk: 'The robot takes it back',
+    ret: 'Wrong item / Need help', retOk: 'Staff notified — please wait', sending: 'Sending…',
     order: 'Order', orderNew: 'Kitchen received · preparing', orderPaid: 'Payment reported · waiting for staff', total: 'Total',
-    staff: 'Call staff', bill: 'Request bill', staffOk: 'Staff called — please wait', billOk: 'Bill requested — staff will bring it', moved: t => `This item was for ${t} — the kitchen fixed a mix-up` },
+    staff: 'Call staff', bill: 'Request the bill', staffOk: 'Staff called — please wait', billOk: 'Bill requested — staff will come', moved: t => `This item was for ${t} — the kitchen fixed a mix-up` },
 };
 let lang = 'vi';
 try { if (localStorage.getItem('mekoniq.lang') === 'en') lang = 'en'; } catch (e) {}
 const tr = k => DICT[lang][k];
+const both = k => [DICT.vi[k], DICT.en[k]];   // request() success text; App.lang picks the line
+App.lang = lang;
 
 // Delivery status of one stop -> [key, params, step 0-4, tone]. Shared by both languages.
 function status(m, i, s, r) {
@@ -91,14 +97,21 @@ function item(m, i, s) {
   const open = s.status === 'pending' || s.status === 'active';
   const [key, params, step, tone] = status(m, i, s, r);
   const text = tr(key)(params) + (open && r && r.halt ? tr('paused') : '');
-  const k = `c-${m.id}-${i}`;
   return `<div class="card item">
     <div class="row"><b>${what} #${m.id}${s.tray ? ` · ${tr('tray')} ${s.tray}` : ''}</b><span class="small muted">${clock(m.createdAt)}</span></div>
     <div class="what">${esc(m.note || what)}</div>
     ${step ? `<div class="steps">${[1, 2, 3, 4].map(n => `<i class="${n <= step ? 'on' : ''}"></i>`).join('')}</div>` : ''}
     <div class="status ${tone}">${esc(text)}</div>
-    ${open ? `<button class="act warn${isArmed(k) ? ' armed' : ''}" data-m="${m.id}" data-s="${i}"><b>${tr(isArmed(k) ? 'sure' : 'cancel')}</b></button>` : ''}
+    ${open ? problemBtn(m, i, key === 'here' ? 'wrong-item' : 'need-help') : ''}
   </div>`;
+}
+// Problem with an item on its way (F05): policy request tells staff (the trip goes on); direct sends it back after two taps.
+// Both name this table, so the server refuses an item the kitchen has since moved to another table.
+function problemBtn(m, i, reason) {
+  const data = `data-m="${m.id}" data-s="${i}" data-reason="${reason}"`;
+  if (App.site.customerCancel === 'direct') { const k = `c-${m.id}-${i}`; return `<button class="act warn${isArmed(k) ? ' armed' : ''}" data-act="cancelStop" ${data}><b>${tr(isArmed(k) ? 'sure' : 'cancel')}</b></button>`; }
+  const busy = sending(q => q.type === 'returnRequest' && q.mission === m.id && q.stop === i);
+  return `<button class="act warn" data-act="returnRequest" ${data}${busy ? ' disabled' : ''}><b>${tr(busy ? 'sending' : 'ret')}</b></button>`;
 }
 // Orders placed on the robot screen (spec 6.3); their delivery still shows as missions below.
 function orderCard(o) {
@@ -109,21 +122,22 @@ function orderCard(o) {
     <div class="row"><span class="small muted">${tr('total')}</span><b>${vnd(o.total)}</b></div>
     <div class="status ${o.status === 'new' ? '' : 'ok'}">${tr(o.status === 'new' ? 'orderNew' : 'orderPaid')}</div></div>`;
 }
-// Call buttons rest 30 s after a tap; the station alert stays until staff ack it anyway.
-const callUntil = { staff: 0, bill: 0 };
+// Call buttons rest 30 s after the server took the call; the station alert stays until staff ack it anyway.
+const callUntil = { staff: 0, bill: 0 }, FLAG = { staff: 'callStaff', bill: 'requestBill' };
 function render() {
   setHTML($('lang'), ['vi', 'en'].map(l => `<button data-lang="${l}" aria-pressed="${l === lang}">${l.toUpperCase()}</button>`).join(''));
   setHTML($('brand'), BRAND(tr('brand')));
   $('eyebrow').textContent = tr('eyebrow');
-  $('help').textContent = tr('help');
+  $('help').textContent = tr(App.site && App.site.customerCancel === 'direct' ? 'helpDirect' : 'help');
   $('offline').textContent = tr('offline');
   document.documentElement.lang = lang;
   if (!App.site) return;
   $('title').textContent = App.site.points[T] ? tr('table')(short(T)) : T;
-  const call = !!(App.site.features || {}).call;
-  $('foot').hidden = !call;
-  document.body.classList.toggle('ft', call);
-  setHTML($('foot'), ['staff', 'bill'].map(w => `<button class="act ${w === 'staff' ? 'primary' : 'outline'}" data-call="${w}" ${Date.now() < callUntil[w] ? 'disabled' : ''}><b>${tr(w)}</b></button>`).join(''));
+  const calls = ['staff', 'bill'].filter(w => feat(FLAG[w]));   // independent flags (F06, F07)
+  $('foot').hidden = !calls.length;
+  document.body.classList.toggle('ft', !!calls.length);
+  setHTML($('foot'), calls.map(w => { const busy = sending(q => q.type === 'call' && q.what === w);
+    return `<button class="act ${w === 'staff' ? 'primary' : 'outline'}" data-call="${w}" ${busy || Date.now() < callUntil[w] ? 'disabled' : ''}><b>${tr(busy ? 'sending' : w)}</b></button>`; }).join(''));
   if (!App.state) return;
   const rows = (App.state.orders || []).filter(o => o.table === T).map(orderCard);
   for (const m of [...App.state.missions, ...App.state.history]) {
@@ -135,7 +149,7 @@ function render() {
 $('lang').addEventListener('click', e => {
   const b = e.target.closest('[data-lang]');
   if (!b) return;
-  lang = b.dataset.lang;
+  lang = App.lang = b.dataset.lang;
   try { localStorage.setItem('mekoniq.lang', lang); } catch (err) {}
   render();
 });
@@ -143,16 +157,15 @@ $('foot').addEventListener('click', e => {
   const b = e.target.closest('[data-call]');
   if (!b || b.disabled) return;
   const what = b.dataset.call;
-  send({ type: 'call', point: T, what, by: 'Khách ' + pname(T) + ' (QR)' });
-  callUntil[what] = Date.now() + 30000;
-  toast(tr(what + 'Ok'));
+  request({ type: 'call', point: T, what, by: 'Khách ' + pname(T) + ' (QR)' }, both(what + 'Ok'), rep => { if (rep.ok) callUntil[what] = Date.now() + 30000; render(); }, true);
   render();
 });
 $('list').addEventListener('click', e => {
-  const b = e.target.closest('[data-m]');
-  if (!b) return;
-  const m = +b.dataset.m, s = +b.dataset.s;
-  armed(`c-${m}-${s}`, () => send({ type: 'cancelStop', mission: m, stop: s, table: T, why: 'customer', by: 'Khách ' + pname(T) + ' (QR)' }), render);
+  const b = e.target.closest('[data-act]');
+  if (!b || b.disabled) return;
+  const d = { mission: +b.dataset.m, stop: +b.dataset.s, table: T, by: 'Khách ' + pname(T) + ' (QR)' };
+  if (b.dataset.act === 'returnRequest') { request({ type: 'returnRequest', ...d, reason: b.dataset.reason }, both('retOk'), render, true); render(); }
+  else armed(`c-${d.mission}-${d.stop}`, () => request({ type: 'cancelStop', ...d, why: 'customer' }, both('cancelOk'), render), render);
 });
 render();
 connect(m => {
