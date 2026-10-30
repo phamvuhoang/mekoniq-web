@@ -599,6 +599,7 @@ function renderPolicy() {
     }).join(''));
   }
   $('reqStation').value = (D.service || {}).requestStation || '';
+  $('preset').value = PRESETS[D.serviceProfile] ? D.serviceProfile : 'custom';   // the current profile (picking another only changes on Áp dụng gợi ý)
   for (const b of $('policy').querySelectorAll('[data-cancel]')) b.setAttribute('aria-pressed', D.customerCancel === b.dataset.cancel);
   $('cancelHint').textContent = (CANCEL_VI[D.customerCancel] || CANCEL_VI.request)[1];
   $('profile').textContent = 'Đang chọn: ' + profileVi(D) + '.';

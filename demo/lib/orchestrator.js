@@ -25,7 +25,7 @@ const CALL_VI = { staff: 'gọi nhân viên', bill: 'yêu cầu tính tiền' };
 const CALL_FLAG = { staff: 'callStaff', bill: 'requestBill' };
 const RETURN_VI = { 'wrong-item': 'báo nhầm món', 'need-help': 'cần hỗ trợ' };
 const FEATURE_VI = { callStaff: 'Gọi nhân viên', requestBill: 'Yêu cầu tính tiền', guide: 'Dẫn khách', order: 'Gọi món', busRobot: 'Thu dọn từ robot' };
-const RECEIPT_MS = 24 * 3600 * 1000, KEEP_RECEIPTS = 1000;   // call/returnRequest receipts (bill receipts live in the bill)
+const RECEIPT_MS = 24 * 3600 * 1000, KEEP_RECEIPTS = 1000;   // call/returnRequest/order receipts (bill receipts live in the bill)
 const OPEN_BILL = ['prepared', 'claimed', 'settled'];
 const BILL_VI = { billPrepare: 'đã chuẩn bị', billClaim: 'khách báo đã trả', billSettle: 'đã xác nhận thu', billClose: 'đã đóng', billVoid: 'đã vô hiệu hóa' };
 const BILL_FIELDS = ['type', 'table', 'orderIds', 'total', 'note', 'bill', 'rev', 'method', 'reason', 'requestId'];   // whitelist, + server-side by
@@ -76,10 +76,11 @@ function alert(c, key, level, text, robot, extra) {
   if (c.st.alerts.some(a => a.key === key)) return;
   c.st.alerts.unshift({ id: ++c.st.alertSeq, key, t: c.now, level, text, robot, ...extra });
   // Full list: drop the oldest warning (possibly the one just added), so guest calls / orders never push out an
-  // e-stop, offline or blocked alert. Only when all 20 are errors does the oldest error go.
+  // e-stop, offline or blocked alert, or a guest's "I paid" waiting for staff. Only when all 20 are those does the oldest go.
+  const keep = a => a.level === 'error' || a.key.startsWith('bill-claim-');
   while (c.st.alerts.length > 20) {
     let i = c.st.alerts.length - 1;
-    while (i >= 0 && c.st.alerts[i].level === 'error') i--;
+    while (i >= 0 && keep(c.st.alerts[i])) i--;
     c.st.alerts.splice(i >= 0 ? i : c.st.alerts.length - 1, 1);
   }
 }
@@ -97,7 +98,7 @@ function allowed(c, key, session, requestId) {
   return p.effective;
 }
 const reqStation = c => (c.site.service || {}).requestStation || null;   // a v2 site that skipped normalize may lack service
-// Call / returnRequest receipts (spec §6), persisted in st for 24 h: a retry with the same requestId is answered, never
+// Call / returnRequest / order receipts (spec §6), persisted in st for 24 h: a retry with the same requestId is answered, never
 // re-alerted, even after ack. No requestId (old cached client): processed without a receipt.
 const rid = d => (typeof d.requestId === 'string' ? d.requestId.trim().slice(0, 100) : '');
 function seen(c, d, fp, session) {
@@ -372,9 +373,12 @@ const vnd = n => String(n).replace(/\B(?=(\d{3})+$)/g, '.') + 'đ';
 // sends the delivery as usual (food must be cooked first, so no mission is created here).
 function order(c, d, by, session) {
   const P = c.site.points, menu = c.site.menu || {}, items = menu.items || [], cats = menu.cats || [];
-  if (!P[d.table] || P[d.table].kind !== 'table' || !allowed(c, 'order', session, d.requestId)) return;
-  if (c.st.bills.some(b => b.table === d.table && OPEN_BILL.includes(b.status)))   // spec §7.2: never change a total already shown
-    return reply(c, session, d.requestId, { ok: false, code: 'billing', text: `${pname(c, d.table)}: Bàn đang tính tiền — nhờ nhân viên vô hiệu hóa phiếu trước khi gọi thêm` });
+  if (!P[d.table] || P[d.table].kind !== 'table') return;
+  const fp = JSON.stringify(['order', d.table, d.items]);   // a lost reply + retry is the same order, never a second one
+  if (seen(c, d, fp, session) || !allowed(c, 'order', session, d.requestId)) return;
+  const billed = c.st.bills.find(b => b.table === d.table && OPEN_BILL.includes(b.status));   // spec §7.2: never change a total already shown
+  if (billed) return reply(c, session, d.requestId, { ok: false, code: 'billing',
+    text: `${pname(c, d.table)}: Bàn đang tính tiền — nhờ nhân viên ${billed.status === 'settled' ? 'đóng lượt' : 'vô hiệu hóa phiếu'} trước khi gọi thêm` });
   const lines = (Array.isArray(d.items) ? d.items : []).map(x => ({ x, it: x && items.find(i => i.id === x.id) }));
   if (!lines.length || lines.length > 30 || lines.some(({ x, it }) => !it || !Number.isInteger(x.qty) || x.qty < 1 || x.qty > 20))   // menu changed under an open cart
     return reply(c, session, d.requestId, { ok: false, code: 'invalid', text: 'Giỏ có món không còn trong thực đơn hoặc số lượng không hợp lệ' });
@@ -392,7 +396,7 @@ function order(c, d, by, session) {
     ev(c, { stationSound: 'ding', point: station, text });
   }
   log(c, 'info', `${by}: ${pname(c, d.table)} gọi ${o.items.length} món · ${vnd(o.total)} (đơn #${o.id})`);
-  reply(c, session, d.requestId, { ok: true, text: `Đã gửi đơn #${o.id}` });   // the robot screen clears its cart only on this
+  accept(c, d, session, fp, `Đã gửi đơn #${o.id}`);   // the robot screen clears its cart only on this
 }
 
 // Staff-verified bills (lib/billing.js decides). Amounts in texts come from the bill, never from the client.
@@ -642,13 +646,18 @@ function fromUI(c, d, session, seed) {
       }
       return;
     case 'sim': if (r && SIM_FAULTS.includes(d.fault)) c.cmds.push({ cmd: 'sim', robot: r.id, fault: d.fault }); return;
-    case 'reset':
+    case 'reset': {   // demo: never while a bill is open; bill numbers (bank memo), closed bills with their receipts and closed orders survive
+      const billed = [...new Set(st.bills.filter(b => OPEN_BILL.includes(b.status)).map(b => pname(c, b.table)))];
+      if (billed.length) return reply(c, session, d.requestId, { ok: false, code: 'billing',
+        text: `${billed.join(', ')} còn phiếu tính tiền chưa đóng — đóng lượt hoặc vô hiệu hóa phiếu trước khi khởi động lại demo` });
+      const keep = { billSeq: st.billSeq, orderSeq: st.orderSeq, bills: st.bills, orders: st.orders.filter(o => o.status === 'closed') };
       for (const k of Object.keys(st)) delete st[k];
-      Object.assign(st, init(c.site, c.now));
+      Object.assign(st, init(c.site, c.now), keep);
       c.cmds.push({ cmd: 'reset' });
       c.ui.push({ payload: JSON.stringify({ type: 'map', map: st.map }) });
       log(c, 'info', `${by} khởi động lại demo`);
       return;
+    }
   }
 }
 

@@ -23,10 +23,11 @@ function send(obj) { Transport.send(JSON.stringify(obj)); }
 
 // Guest requests (spec §6): pending until the server's reply event with the same requestId, so nothing is toasted as
 // sent before the server took it. ok = [vi, en] success text; done(reply) runs on ok, refusal or timeout.
-// retry: the server keeps receipts, so a reconnect sends the same request (same requestId) again; a new tap is a new request.
+// retry: the server keeps receipts, so a reconnect sends the same request (same requestId) again; a new tap is a new request
+// unless msg already carries the requestId of the earlier try (robot order: the same cart after a timeout).
 const REPLY_MS = 10000, reqs = new Map();
 function request(msg, ok, done = () => {}, retry = false) {
-  const id = msg.requestId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const id = msg.requestId ||= Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   reqs.set(id, { msg, ok, done, retry, timer: setTimeout(() => settle({ requestId: id, ok: false, code: 'timeout' }), REPLY_MS) });
   send(msg);
   return id;
@@ -44,7 +45,7 @@ const forget = id => { const q = reqs.get(id); if (q) { clearTimeout(q.timer); r
 const sending = test => [...reqs.values()].some(q => test(q.msg));
 const say = (vi, en) => App.lang === 'en' ? en : App.lang === 'both' ? vi + ' · ' + en : vi;
 // Server refusals are Vietnamese; guests reading English get a line per code.
-const REFUSED_EN = { disabled: 'This service is turned off', 'not-ready': 'This service is not set up yet', stale: 'This item has changed — please reload',
+const REFUSED_EN = { disabled: 'This service is turned off', 'not-ready': 'This service is not set up yet', stale: 'This has changed — showing the latest',
   policy: 'Please use “Wrong item / Need help”', billing: 'Your bill is being prepared — please ask staff', unreachable: 'The robot cannot reach that table yet',
   unsupported: 'This robot cannot change speed', invalid: 'Please check your choice and try again', reload: 'Please reload this page',
   status: 'This bill was already handled — please ask staff' };

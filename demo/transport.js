@@ -44,9 +44,15 @@ const Transport = (() => {
       }
     };
     const run = inp => {
-      // "Xoá dữ liệu demo" also drops the saved config: back to site.json before the orchestrator rebuilds its state.
-      if (custom && inp.source === 'ui' && inp.data && inp.data.type === 'reset') { custom = null; site = seed; deliver([{ payload: JSON.stringify({ type: 'site', site }) }]); }
-      const r = O.handle(st, site, inp, Date.now());
+      let r = O.handle(st, site, inp, Date.now());
+      // "Xoá dữ liệu demo" also drops the saved config once the orchestrator took the reset (it refuses while a bill is
+      // open): back to site.json, and the state rebuilt once more on it (robots, route map).
+      if (custom && r.cmds.some(c => c.cmd === 'reset')) {
+        deliver(r.ui);
+        custom = null; site = seed;
+        deliver([{ payload: JSON.stringify({ type: 'site', site }) }]);
+        r = O.handle(st, site, inp, Date.now());
+      }
       if (r.site) { site = custom = r.site; save(); }   // config saved from setup.html
       deliver(r.ui);
       for (const cmd of r.cmds) for (const e of S.handle(sim, site, cmd, Date.now())) run({ source: 'adapter', data: e });

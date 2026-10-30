@@ -222,7 +222,7 @@ $('startFace').innerHTML = face('happy');
 
 let guiding = false, gpick = null, gsent = null, g0 = {};   // guide: staff choosing the table; requestId on its way; longest route seen per mission (progress bar)
 let paying = null;   // bill id of the open pay screen
-let ordering = false, cart = {}, ocat = null, otable = null;   // order food: open, qty per item id, category tab, table picked (robot not at one)
+let ordering = false, cart = {}, ocat = null, otable = null, osent = {};   // order food: open, qty per item id, category tab, table picked (robot not at one), {key, id} of the cart last sent
 let pick = [], mode = 'deliver';   // tables chosen while on standby at a station; deliver | bus (one table)
 const act = (cls, vi, en, dataAct, extra = '') => `<button class="act ${cls}" data-act="${dataAct}" ${extra}>${L(vi, en)}</button>`;
 // Two-tap button: first tap arms it (label changes), second tap runs (see click handler).
@@ -583,10 +583,11 @@ $('main').addEventListener('click', e => {
   }
   if (a === 'order') { ordering = true; cart = {}; otable = null; render(); }
   if (a === 'orderBack') { ordering = false; render(); }
-  if (a === 'orderSend') {   // the cart is emptied only by the server's ok; a refusal keeps it
-    const t = hereTable(r) || otable, items = Object.entries(cart).map(([id, qty]) => ({ id, qty }));
-    if (t && items.length) request({ type: 'order', table: t, items, by: 'Khách ' + pname(t) + ' (màn ' + ID + ')' }, ['Đã gửi bếp', 'Sent to the kitchen'],
-      rep => { if (rep.ok) { ordering = false; cart = {}; otable = null; } render(); });
+  if (a === 'orderSend') {   // the cart is emptied only by the server's ok; a refusal keeps it. The same cart resent after a timeout or
+    // reconnect keeps its requestId, so a lost reply never doubles the kitchen order; a changed cart is a new order.
+    const t = hereTable(r) || otable, items = Object.entries(cart).map(([id, qty]) => ({ id, qty })), key = JSON.stringify([t, items]);
+    if (t && items.length) osent = { key, id: request({ type: 'order', table: t, items, requestId: osent.key === key ? osent.id : undefined, by: 'Khách ' + pname(t) + ' (màn ' + ID + ')' }, ['Đã gửi bếp', 'Sent to the kitchen'],
+      rep => { if (rep.ok) { ordering = false; cart = {}; otable = null; osent = {}; } render(); }, true) };
     render();
   }
   if (a === 'guide') { guiding = true; gpick = null; render(); }
